@@ -1,0 +1,37 @@
+Meta_ticker
+Meta_yearReport
+Meta_lengthReport
+Chỉ tiêu cơ cấu nguồn vốn_(ST+LT borrowings)/Equity
+Chỉ tiêu cơ cấu nguồn vốn_Debt/Equity
+Chỉ tiêu cơ cấu nguồn vốn_Fixed Asset-To-Equity
+Chỉ tiêu cơ cấu nguồn vốn_Owners' Equity/Charter Capital
+Chỉ tiêu hiệu quả hoạt động_Asset Turnover
+Chỉ tiêu hiệu quả hoạt động_Fixed Asset Turnover
+Chỉ tiêu hiệu quả hoạt động_Days Sales Outstanding
+Chỉ tiêu hiệu quả hoạt động_Days Inventory Outstanding
+Chỉ tiêu hiệu quả hoạt động_Days Payable Outstanding
+Chỉ tiêu hiệu quả hoạt động_Cash Cycle
+Chỉ tiêu hiệu quả hoạt động_Inventory Turnover
+Chỉ tiêu khả năng sinh lợi_EBIT Margin (%)
+Chỉ tiêu khả năng sinh lợi_Gross Profit Margin (%)
+Chỉ tiêu khả năng sinh lợi_Net Profit Margin (%)
+Chỉ tiêu khả năng sinh lợi_ROE (%)
+Chỉ tiêu khả năng sinh lợi_ROIC (%)
+Chỉ tiêu khả năng sinh lợi_ROA (%)
+Chỉ tiêu khả năng sinh lợi_EBITDA (Bn. VND)
+Chỉ tiêu khả năng sinh lợi_EBIT (Bn. VND)
+Chỉ tiêu khả năng sinh lợi_Dividend yield (%)
+Chỉ tiêu thanh khoản_Current Ratio
+Chỉ tiêu thanh khoản_Cash Ratio
+Chỉ tiêu thanh khoản_Quick Ratio
+Chỉ tiêu thanh khoản_Interest Coverage
+Chỉ tiêu thanh khoản_Financial Leverage
+Chỉ tiêu định giá_Market Capital (Bn. VND)
+Chỉ tiêu định giá_Outstanding Share (Mil. Shares)
+Chỉ tiêu định giá_P/E
+Chỉ tiêu định giá_P/B
+Chỉ tiêu định giá_P/S
+Chỉ tiêu định giá_P/Cash Flow
+Chỉ tiêu định giá_EPS (VND)
+Chỉ tiêu định giá_BVPS (VND)
+Chỉ tiêu định giá_EV/EBITDA

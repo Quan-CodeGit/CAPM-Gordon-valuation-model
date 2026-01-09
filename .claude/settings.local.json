@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(clip:*)",
+      "Bash(start index.html)",
+      "Bash(tasklist)",
+      "Bash(ls:*)",
+      "Bash(timeout:*)",
+      "Bash(curl:*)",
+      "Bash(ping:*)",
+      "Bash(findstr:*)",
+      "Bash(del backend_demo.py backend_old.py backend.py test_backend.py start_frontend.py check_setup.py)",
+      "Bash(dir /B *.bat *.txt *.html *.py)",
+      "Bash(taskkill:*)",
+      "Bash(cat:*)",
+      "Bash(pip install:*)",
+      "Bash(pip show:*)",
+      "Bash(chcp 65001:*)",
+      "Bash(set PYTHONIOENCODING=utf-8:*)",
+      "Bash(START.bat)",
+      "Bash(cmd /c \"python -u backend_tradingview.py & start index.html\")",
+      "Bash(start http://localhost:5000/)",
+      "Bash(git init:*)",
+      "Bash(git config:*)",
+      "Bash(git add:*)",
+      "Bash(dir:*)",
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch:*)"
+    ]
+  }
+}

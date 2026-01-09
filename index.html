@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAPM & Gordon Model Stock Valuation Calculator</title>
+
+    <!-- React and ReactDOM from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <!-- Babel for JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+                sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        // Lucide React icons as simple SVG components
+        const TrendingUp = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+        );
+
+        const Info = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" strokeWidth={2} />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 16v-4m0-4h.01" />
+            </svg>
+        );
+
+        const AlertCircle = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" strokeWidth={2} />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
+            </svg>
+        );
+
+        function CAPMGordonCalculator() {
+            const [ticker, setTicker] = useState('');
+            const [market, setMarket] = useState('VN'); // 'VN' or 'US'
+            const [loading, setLoading] = useState(false);
+            const [result, setResult] = useState(null);
+            const [error, setError] = useState('');
+
+            // Currency formatting function
+            const formatCurrency = (amount, currency) => {
+                if (currency === 'VND') {
+                    // Vietnamese Dong - no decimals, thousands separator
+                    // Format with comma separators for thousands
+                    return new Intl.NumberFormat('en-US', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0
+                    }).format(Math.round(amount)) + ' ₫';
+                } else {
+                    // USD - with decimals and $ symbol
+                    return '$' + new Intl.NumberFormat('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }).format(amount);
+                }
+            };
+
+            const calculateValuation = async () => {
+                if (!ticker.trim()) {
+                    setError('Please enter a stock ticker');
+                    return;
+                }
+
+                setLoading(true);
+                setError('');
+                setResult(null);
+
+                try {
+                    // Call Flask backend API
+                    const API_URL = 'http://localhost:5000';
+                    const response = await fetch(`${API_URL}/api/valuation/${ticker.toUpperCase()}?market=${market}`);
+
+                    // Check if the API request was successful
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        const errorMsg = errorData.error || `API error: ${response.status} ${response.statusText}`;
+                        throw new Error(errorMsg);
+                    }
+
+                    const data = await response.json();
+
+                    // Validate required fields
+                    if (!data.ticker || !data.companyName) {
+                        throw new Error('Invalid stock data received. Please verify the ticker symbol.');
+                    }
+
+                    setResult(data);
+
+                } catch (err) {
+                    console.error('Valuation error:', err);
+
+                    // Provide more specific error messages
+                    let errorMessage = err.message;
+
+                    if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+                        errorMessage = 'Cannot connect to backend server. Please ensure the Python backend is running on http://localhost:5000';
+                    } else if (err.message.includes('Invalid ticker')) {
+                        errorMessage = 'Unable to fetch stock data. Please verify the ticker symbol.';
+                    }
+
+                    setError(errorMessage);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+                    <div className="max-w-4xl mx-auto">
+                        <div className="bg-white rounded-2xl shadow-xl p-8">
+                            <div className="flex items-center gap-3 mb-6">
+                                <TrendingUp className="w-8 h-8 text-indigo-600" />
+                                <h1 className="text-3xl font-bold text-gray-800">CAPM & Gordon Model Valuation</h1>
+                            </div>
+
+                            <div className="bg-indigo-50 rounded-lg p-4 mb-6 flex gap-3">
+                                <Info className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
+                                <div className="text-sm text-gray-700">
+                                    <p className="font-semibold mb-2">This calculator compares two valuation methods:</p>
+                                    <p className="mb-1"><span className="font-semibold">CAPM:</span> E(R) = Rf + β(Rm - Rf) - Required return based on risk</p>
+                                    <p className="mb-1"><span className="font-semibold">Gordon Model:</span> E(R) = (D₁/P₀) + g - Expected return based on dividends</p>
+                                    <p className="text-xs italic mt-2">If Gordon return &lt; CAPM return → Stock is OVERVALUED (current price too high, should fall)</p>
+                                    <p className="text-xs italic">If Gordon return &gt; CAPM return → Stock is UNDERVALUED (current price too low, should rise)</p>
+                                    <p className="text-xs font-semibold mt-3 text-amber-700">⚠️ Note: Gordon Model requires consistent dividend payments. Best for mature, dividend-paying companies.</p>
+                                </div>
+                            </div>
+
+                            <div className="bg-green-50 rounded-lg p-4 mb-6 border border-green-200">
+                                <p className="text-sm font-semibold text-green-800 mb-2">📊 Recommended Vietnamese Dividend Stocks:</p>
+                                <div className="text-xs text-green-700 grid grid-cols-2 md:grid-cols-4 gap-2">
+                                    <div><span className="font-semibold">VNM</span> - Vinamilk</div>
+                                    <div><span className="font-semibold">VCB</span> - Vietcombank</div>
+                                    <div><span className="font-semibold">FPT</span> - FPT Corp</div>
+                                    <div><span className="font-semibold">HPG</span> - Hoa Phat</div>
+                                    <div><span className="font-semibold">SAB</span> - Sabeco</div>
+                                    <div><span className="font-semibold">GAS</span> - PVGas</div>
+                                    <div><span className="font-semibold">TCB</span> - Techcombank</div>
+                                    <div><span className="font-semibold">MBB</span> - Military Bank</div>
+                                    <div><span className="font-semibold">BVH</span> - Bao Viet</div>
+                                    <div><span className="font-semibold">PLX</span> - Petrolimex</div>
+                                    <div><span className="font-semibold">VHM</span> - Vinhomes</div>
+                                    <div><span className="font-semibold">MSN</span> - Masan</div>
+                                </div>
+                                <p className="text-xs text-green-600 mt-2 italic">US stocks: AAPL, MSFT, JNJ, PG, KO, PEP, etc.</p>
+                            </div>
+
+                            <div className="mb-8">
+                                {/* Market Selector */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Select Market
+                                    </label>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => setMarket('VN')}
+                                            className={`flex items-center gap-3 px-6 py-3 rounded-lg border-2 font-semibold transition-all ${
+                                                market === 'VN'
+                                                    ? 'bg-red-600 text-white border-red-600 shadow-lg'
+                                                    : 'bg-white text-gray-700 border-gray-300 hover:border-red-600 hover:shadow-md'
+                                            }`}
+                                            disabled={loading}
+                                        >
+                                            <img
+                                                src="https://images.emojiterra.com/twitter/v14.0/1024px/1f1fb-1f1f3.png"
+                                                alt="Vietnam Flag"
+                                                className="w-8 h-8 rounded-sm"
+                                            />
+                                            <span>Vietnam</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setMarket('US')}
+                                            className={`flex items-center gap-3 px-6 py-3 rounded-lg border-2 font-semibold transition-all ${
+                                                market === 'US'
+                                                    ? 'bg-blue-600 text-white border-blue-600 shadow-lg'
+                                                    : 'bg-white text-gray-700 border-gray-300 hover:border-blue-600 hover:shadow-md'
+                                            }`}
+                                            disabled={loading}
+                                        >
+                                            <img
+                                                src="https://images.emojiterra.com/twitter/v13.1/512px/1f1fa-1f1f8.png"
+                                                alt="United States Flag"
+                                                className="w-8 h-8 rounded-sm"
+                                            />
+                                            <span>United States</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Stock Ticker Symbol
+                                </label>
+                                <div className="flex gap-3">
+                                    <input
+                                        type="text"
+                                        value={ticker}
+                                        onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                                        onKeyPress={(e) => e.key === 'Enter' && calculateValuation()}
+                                        placeholder={market === 'VN' ? 'e.g., VNM, VCB, FPT, SAB, GAS, TCB' : 'e.g., AAPL, MSFT, GOOGL, TSLA'}
+                                        className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none text-lg font-semibold uppercase"
+                                        disabled={loading}
+                                    />
+                                    <button
+                                        onClick={calculateValuation}
+                                        disabled={loading}
+                                        className="px-8 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        {loading ? 'Analyzing...' : 'Analyze'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {error && (
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                                    <p className="text-red-700">{error}</p>
+                                </div>
+                            )}
+
+                            {result && (
+                                <div className="space-y-6">
+                                    <div className={`rounded-xl p-6 text-white ${
+                                        result.valuation === 'UNDERVALUED'
+                                            ? 'bg-gradient-to-r from-green-600 to-emerald-600'
+                                            : 'bg-gradient-to-r from-red-600 to-rose-600'
+                                    }`}>
+                                        <h2 className="text-lg font-medium mb-2">{result.companyName}</h2>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <AlertCircle className="w-8 h-8" />
+                                            <div>
+                                                <p className="text-3xl font-bold">{result.valuation}</p>
+                                                <p className="text-sm opacity-90">
+                                                    {result.valuation === 'UNDERVALUED'
+                                                        ? 'Current price < Fair price - Expected to RISE'
+                                                        : 'Current price > Fair price - Expected to FALL'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {result.lowDividendWarning && (
+                                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+                                            <div className="flex items-start">
+                                                <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
+                                                <div>
+                                                    <p className="font-semibold text-yellow-800">Warning</p>
+                                                    <p className="text-sm text-yellow-700 mt-1">{result.lowDividendWarning}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="bg-blue-50 rounded-lg p-5 border-2 border-blue-200">
+                                            <h3 className="font-semibold text-gray-800 mb-3">CAPM Analysis</h3>
+                                            <div className="space-y-2">
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Required Return:</span>
+                                                    <span className="font-bold text-blue-700">{(result.capmReturn * 100).toFixed(2)}%</span>
+                                                </div>
+                                                <div className="text-sm text-gray-600 mt-3">
+                                                    <p>Formula: {(result.riskFreeRate * 100).toFixed(2)}% + {result.beta.toFixed(2)} × ({(result.marketReturn * 100).toFixed(2)}% - {(result.riskFreeRate * 100).toFixed(2)}%)</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-purple-50 rounded-lg p-5 border-2 border-purple-200">
+                                            <h3 className="font-semibold text-gray-800 mb-3">Gordon Model Analysis</h3>
+                                            <div className="space-y-2">
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Expected Return:</span>
+                                                    <span className="font-bold text-purple-700">{(result.gordonReturn * 100).toFixed(2)}%</span>
+                                                </div>
+                                                <div className="text-sm text-gray-600 mt-3">
+                                                    <p>Formula: ({formatCurrency(result.dividendD1, result.currency)}/{formatCurrency(result.currentPrice, result.currency)}) + {(result.dividendGrowth * 100).toFixed(2)}%</p>
+                                                    <p className="text-xs mt-1">Where D₁ = D₀ × (1 + g) = {formatCurrency(result.dividend, result.currency)} × {(1 + result.dividendGrowth).toFixed(3)} = {formatCurrency(result.dividendD1, result.currency)}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-gray-50 rounded-lg p-5">
+                                        <h3 className="font-semibold text-gray-800 mb-3">Valuation Summary</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div>
+                                                <p className="text-sm text-gray-600">Current Price</p>
+                                                <p className="text-2xl font-bold text-gray-800">{formatCurrency(result.currentPrice, result.currency)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm text-gray-600">Fair Price (CAPM-based)</p>
+                                                <p className="text-2xl font-bold text-gray-800">{formatCurrency(result.fairPrice, result.currency)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm text-gray-600">Difference</p>
+                                                <p className={`text-2xl font-bold ${result.priceDifference > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                    {result.priceDifference > 0 ? '+' : ''}{result.priceDifference.toFixed(2)}%
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-gray-50 rounded-lg p-5">
+                                        <h3 className="font-semibold text-gray-800 mb-3">Key Metrics</h3>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            <div>
+                                                <p className="text-xs text-gray-600">Beta (β)</p>
+                                                <p className="text-lg font-bold">{result.beta.toFixed(3)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-600">Risk-Free Rate</p>
+                                                <p className="text-lg font-bold">{(result.riskFreeRate * 100).toFixed(2)}%</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-600">Annual Dividend</p>
+                                                <p className="text-lg font-bold">{formatCurrency(result.dividend, result.currency)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-600">Dividend Growth</p>
+                                                <p className="text-lg font-bold">{(result.dividendGrowth * 100).toFixed(2)}%</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Irregular Dividend Warning */}
+                                    {result.irregularDividend && result.dividendConsistencyIssues && result.dividendConsistencyIssues.length > 0 && (
+                                        <div className="bg-orange-100 border border-orange-400 rounded-lg p-3 mb-4 flex items-start gap-2">
+                                            <AlertCircle className="w-5 h-5 text-orange-700 flex-shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="text-sm text-orange-800 font-semibold">Irregular Dividend Pattern Detected</p>
+                                                <p className="text-xs text-orange-700 mt-1">
+                                                    The Gordon Growth Model assumes constant dividend growth. This stock shows irregular dividend patterns:
+                                                </p>
+                                                <ul className="text-xs text-orange-700 mt-1 ml-4 list-disc">
+                                                    {result.dividendConsistencyIssues.map((issue, idx) => (
+                                                        <li key={idx}>{issue}</li>
+                                                    ))}
+                                                </ul>
+                                                <p className="text-xs text-orange-700 mt-1">
+                                                    Results may be less reliable. Consider using other valuation methods for this stock.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {result.peRatio && (
+                                        <div className="bg-indigo-50 rounded-lg p-5 border-2 border-indigo-200">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h3 className="font-semibold text-gray-800">P/E Ratio Analysis</h3>
+                                                {result.currency === 'VND' && (
+                                                    <span className="text-xs text-gray-500 italic">Data source: VCI via vnstock</span>
+                                                )}
+                                            </div>
+
+                                            {/* High-growth warning if g > ke */}
+                                            {result.dividendGrowth > result.capmReturn && (
+                                                <div className="bg-yellow-100 border border-yellow-400 rounded-lg p-3 mb-4 flex items-start gap-2">
+                                                    <AlertCircle className="w-5 h-5 text-yellow-700 flex-shrink-0 mt-0.5" />
+                                                    <div>
+                                                        <p className="text-sm text-yellow-800 font-semibold">High-Growth Stock Detected</p>
+                                                        <p className="text-xs text-yellow-700 mt-1">
+                                                            Growth rate ({(result.dividendGrowth * 100).toFixed(2)}%) exceeds required return ({(result.capmReturn * 100).toFixed(2)}%).
+                                                            Theoretical P/E cannot be calculated as the Gordon Model doesn't apply to stocks growing faster than their required return.
+                                                            This is common for growth/tech stocks that reinvest heavily.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div>
+                                                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Key Drivers</h4>
+                                                    <div className="space-y-2">
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm text-gray-600">Earnings per Share (EPS):</span>
+                                                            <span className="font-bold text-gray-800">{formatCurrency(result.eps, result.currency)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm text-gray-600">Actual P/E Ratio:</span>
+                                                            <span className="font-bold text-indigo-700">{result.peRatio.toFixed(2)}x</span>
+                                                        </div>
+                                                        {result.theoreticalPE && (
+                                                            <div className="flex justify-between">
+                                                                <span className="text-sm text-gray-600">Theoretical P/E:</span>
+                                                                <span className="font-bold text-gray-600">{result.theoreticalPE.toFixed(2)}x</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-semibold text-gray-700 mb-3">P/E Components</h4>
+                                                    <div className="space-y-2">
+                                                        {result.payoutRatio !== null && (
+                                                            <div className="flex justify-between">
+                                                                <span className="text-sm text-gray-600">Payout Ratio:</span>
+                                                                <span className="font-bold text-gray-800">{(result.payoutRatio * 100).toFixed(1)}%</span>
+                                                            </div>
+                                                        )}
+                                                        {result.retentionRatio !== null && (
+                                                            <div className="flex justify-between">
+                                                                <span className="text-sm text-gray-600">Retention Ratio:</span>
+                                                                <span className="font-bold text-gray-800">{(result.retentionRatio * 100).toFixed(1)}%</span>
+                                                            </div>
+                                                        )}
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm text-gray-600">Required Return (k<sub>e</sub>):</span>
+                                                            <span className="font-bold text-gray-800">{(result.capmReturn * 100).toFixed(2)}%</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm text-gray-600">Growth Rate (g):</span>
+                                                            <span className="font-bold text-gray-800">{(result.dividendGrowth * 100).toFixed(2)}%</span>
+                                                        </div>
+                                                        {result.roe !== null && (
+                                                            <div className="flex justify-between">
+                                                                <span className="text-sm text-gray-600">ROE:</span>
+                                                                <span className="font-bold text-gray-800">{(result.roe * 100).toFixed(1)}%</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="mt-4 pt-4 border-t border-indigo-200">
+                                                <p className="text-xs text-gray-600 mb-2">
+                                                    <span className="font-semibold">Formula:</span> P/E = Payout Ratio / (k<sub>e</sub> - g)
+                                                </p>
+                                                {result.payoutRatio && result.theoreticalPE && (
+                                                    <p className="text-xs text-gray-600">
+                                                        = {(result.payoutRatio * 100).toFixed(1)}% / ({(result.capmReturn * 100).toFixed(2)}% - {(result.dividendGrowth * 100).toFixed(2)}%)
+                                                        = {(result.payoutRatio).toFixed(3)} / {(result.capmReturn - result.dividendGrowth).toFixed(4)}
+                                                        = {result.theoreticalPE.toFixed(2)}x
+                                                    </p>
+                                                )}
+                                                {result.retentionRatio !== null && result.roe !== null && (
+                                                    <p className="text-xs text-gray-600 mt-2">
+                                                        <span className="font-semibold">Alternative growth:</span> g = Retention Ratio × ROE = {(result.retentionRatio * 100).toFixed(1)}% × {(result.roe * 100).toFixed(1)}% = {(result.retentionRatio * result.roe * 100).toFixed(2)}%
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="bg-amber-50 rounded-lg p-5 border border-amber-200">
+                                        <h3 className="font-semibold text-gray-800 mb-3">Interpretation:</h3>
+                                        <p className="text-sm text-gray-700">
+                                            {result.valuation === 'UNDERVALUED' ? (
+                                                <>The Gordon Model expected return ({(result.gordonReturn * 100).toFixed(2)}%) is <span className="font-bold text-green-700">higher</span> than the CAPM required return ({(result.capmReturn * 100).toFixed(2)}%). This means the stock is currently <span className="font-bold">undervalued</span> at {formatCurrency(result.currentPrice, result.currency)}. The current price is <span className="font-bold text-green-700">below</span> the fair equilibrium price of {formatCurrency(result.fairPrice, result.currency)}. You'd expect the stock price to <span className="font-bold text-green-700">rise</span> to reach equilibrium.</>
+                                            ) : (
+                                                <>The Gordon Model expected return ({(result.gordonReturn * 100).toFixed(2)}%) is <span className="font-bold text-red-700">lower</span> than the CAPM required return ({(result.capmReturn * 100).toFixed(2)}%). This means the stock is currently <span className="font-bold">overvalued</span> at {formatCurrency(result.currentPrice, result.currency)}. The current price is <span className="font-bold text-red-700">above</span> the fair equilibrium price of {formatCurrency(result.fairPrice, result.currency)}. You'd expect the stock price to <span className="font-bold text-red-700">fall</span> to reach equilibrium.</>
+                                            )}
+                                        </p>
+                                    </div>
+
+                                    {result.sources && (
+                                        <div className="bg-gray-50 rounded-lg p-5 border border-gray-200">
+                                            <h3 className="font-semibold text-gray-700 text-sm mb-3">Data Sources:</h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600">
+                                                <div><span className="font-medium">Beta:</span> {result.sources.beta}</div>
+                                                <div><span className="font-medium">Risk-Free Rate:</span> {result.sources.riskFreeRate}</div>
+                                                <div><span className="font-medium">Market Return:</span> {result.sources.marketReturn}</div>
+                                                <div><span className="font-medium">Current Price:</span> {result.sources.currentPrice}</div>
+                                                <div><span className="font-medium">Dividend:</span> {result.sources.dividend}</div>
+                                                <div><span className="font-medium">Dividend Growth:</span> {result.sources.dividendGrowth}</div>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-3 italic">Powered by Yahoo Finance API via Python Flask Backend</p>
+                                        </div>
+                                    )}
+
+                                    {/* Model Assumptions & Limitations */}
+                                    <div className="bg-blue-50 rounded-lg p-5 border border-blue-200">
+                                        <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                                            <Info className="w-5 h-5 text-blue-600" />
+                                            Model Assumptions & Limitations
+                                        </h3>
+
+                                        <div className="space-y-3">
+                                            <div>
+                                                <h4 className="text-sm font-semibold text-gray-700 mb-1">CAPM Assumptions:</h4>
+                                                <ul className="text-xs text-gray-600 ml-4 list-disc space-y-1">
+                                                    <li>Investors hold diversified portfolios to eliminate unsystematic risk</li>
+                                                    <li>Single-period transaction horizon</li>
+                                                    <li>Investors can borrow and lend at the risk-free rate of return</li>
+                                                    <li>Perfect capital market (no transaction costs, taxes, or restrictions)</li>
+                                                    <li>All investors have homogeneous expectations about asset returns</li>
+                                                </ul>
+                                            </div>
+
+                                            <div>
+                                                <h4 className="text-sm font-semibold text-gray-700 mb-1">Gordon Growth Model Assumptions:</h4>
+                                                <ul className="text-xs text-gray-600 ml-4 list-disc space-y-1">
+                                                    <li>Company exists forever (perpetuity assumption)</li>
+                                                    <li>Dividends per share increase at a constant rate indefinitely</li>
+                                                    <li>Required rate of return (k<sub>e</sub>) must be greater than growth rate (g)</li>
+                                                    <li>Stable economic environment for the foreseeable future</li>
+                                                </ul>
+                                            </div>
+
+                                            <div>
+                                                <h4 className="text-sm font-semibold text-gray-700 mb-1">Key Limitations:</h4>
+                                                <ul className="text-xs text-gray-600 ml-4 list-disc space-y-1">
+                                                    <li><span className="font-medium">CAPM:</span> Assumes market efficiency and ignores transaction costs, which rarely hold in reality</li>
+                                                    <li><span className="font-medium">Gordon Model:</span> Assumes constant dividend growth, which is rare due to business cycles and economic changes</li>
+                                                    <li><span className="font-medium">Gordon Model:</span> Not suitable for high-growth or non-dividend-paying stocks</li>
+                                                    <li><span className="font-medium">Both models:</span> Don't capture market sentiment, company-specific events, or macroeconomic shocks</li>
+                                                </ul>
+                                            </div>
+
+                                            <p className="text-xs text-blue-700 italic mt-2">
+                                                Source: <a href="https://www.investopedia.com/terms/c/capm.asp" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-800">Investopedia - CAPM</a> | <a href="https://www.investopedia.com/terms/g/gordongrowthmodel.asp" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-800">Gordon Growth Model</a>
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-xs text-gray-500 italic text-center">
+                                        This analysis is based on theoretical models. Actual stock prices may differ due to market sentiment,
+                                        company-specific events, macroeconomic factors, and other variables not captured by these models.
+                                        This is not investment advice.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Render the app
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<CAPMGordonCalculator />);
+    </script>
+</body>
+</html>

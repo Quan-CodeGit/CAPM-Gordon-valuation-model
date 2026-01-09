@@ -1,0 +1,37 @@
+Meta_ticker: VNM
+Meta_yearReport: 2024
+Meta_lengthReport: 5
+Chỉ tiêu cơ cấu nguồn vốn_(ST+LT borrowings)/Equity: 0.2607159255
+Chỉ tiêu cơ cấu nguồn vốn_Debt/Equity: 0.5217683564
+Chỉ tiêu cơ cấu nguồn vốn_Fixed Asset-To-Equity: 0.34694601202730957
+Chỉ tiêu cơ cấu nguồn vốn_Owners' Equity/Charter Capital: 1.7308695702679442
+Chỉ tiêu hiệu quả hoạt động_Asset Turnover: 1.1470704479
+Chỉ tiêu hiệu quả hoạt động_Fixed Asset Turnover: 4.8955687739
+Chỉ tiêu hiệu quả hoạt động_Days Sales Outstanding: 28.363734725366623
+Chỉ tiêu hiệu quả hoạt động_Days Inventory Outstanding: 59.9545442453
+Chỉ tiêu hiệu quả hoạt động_Days Payable Outstanding: 38.7260736706
+Chỉ tiêu hiệu quả hoạt động_Cash Cycle: 127.04435264126663
+Chỉ tiêu hiệu quả hoạt động_Inventory Turnover: 6.087945536
+Chỉ tiêu khả năng sinh lợi_EBIT Margin (%): 0.1684058469971343
+Chỉ tiêu khả năng sinh lợi_Gross Profit Margin (%): 0.4141970777608894
+Chỉ tiêu khả năng sinh lợi_Net Profit Margin (%): 0.1520219108246915
+Chỉ tiêu khả năng sinh lợi_ROE (%): 0.2936214847
+Chỉ tiêu khả năng sinh lợi_ROIC (%): 0.2289344259
+Chỉ tiêu khả năng sinh lợi_ROA (%): 0.1743798413
+Chỉ tiêu khả năng sinh lợi_EBITDA (Bn. VND): 12499712332272
+Chỉ tiêu khả năng sinh lợi_EBIT (Bn. VND): 10404552687331
+Chỉ tiêu khả năng sinh lợi_Dividend yield (%): 0.0710784314
+Chỉ tiêu thanh khoản_Current Ratio: 2.0343755129
+Chỉ tiêu thanh khoản_Cash Ratio: 0.1206525856
+Chỉ tiêu thanh khoản_Quick Ratio: 0.4583509412
+Chỉ tiêu thanh khoản_Interest Coverage: -37.235641130152786
+Chỉ tiêu thanh khoản_Financial Leverage: 1.5217683563782505
+Chỉ tiêu định giá_Market Capital (Bn. VND): 127905273234000
+Chỉ tiêu định giá_Outstanding Share (Mil. Shares): 2089955445
+Chỉ tiêu định giá_P/E: 13.6180841968
+Chỉ tiêu định giá_P/B: 3.9625139659
+Chỉ tiêu định giá_P/S: 2.0702471814
+Chỉ tiêu định giá_P/Cash Flow: 13.2052548052
+Chỉ tiêu định giá_EPS (VND): 4494.024204544705
+Chỉ tiêu định giá_BVPS (VND): 15444.7405174252
+Chỉ tiêu định giá_EV/EBITDA: 10.7964619444
