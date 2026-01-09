@@ -742,6 +742,9 @@ def health_check():
     })
 
 if __name__ == '__main__':
+    # Use PORT from environment variable (for Render/cloud deployment) or default to 5000
+    port = int(os.environ.get('PORT', 5000))
+
     print("=" * 60)
     print("CAPM & Gordon Model API - TradingView Version")
     print("=" * 60)
@@ -751,6 +754,8 @@ if __name__ == '__main__':
     print("  - Accurate financial data")
     print("  - Works for Vietnamese and US stocks")
     print("=" * 60)
-    print("Starting server on http://localhost:5000")
+    print(f"Starting server on http://localhost:{port}")
     print("=" * 60)
-    app.run(debug=True, port=5000)
+
+    # Use 0.0.0.0 for cloud deployment (allows external access)
+    app.run(host='0.0.0.0', debug=True, port=port)
