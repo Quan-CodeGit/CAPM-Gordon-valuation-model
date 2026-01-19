@@ -20,7 +20,7 @@ finally:
     sys.stderr = _original_stderr
     sys.stdout = _original_stdout
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import time
 from datetime import datetime, timedelta
@@ -740,6 +740,21 @@ def health_check():
         'message': 'CAPM API with TradingView Scraper',
         'features': ['FREE - No API key needed', 'Real beta from TradingView', 'Accurate financial data']
     })
+
+# Serve frontend HTML and static files
+@app.route('/')
+def serve_frontend():
+    """Serve the main HTML page"""
+    return send_from_directory('.', 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    """Serve static files (CSS, JS, images, etc.)"""
+    try:
+        return send_from_directory('.', path)
+    except:
+        # If file not found, serve index.html (for SPA routing)
+        return send_from_directory('.', 'index.html')
 
 if __name__ == '__main__':
     # Use PORT from environment variable (for Render/cloud deployment) or default to 5000

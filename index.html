@@ -94,10 +94,10 @@
 
                 try {
                     // Call Flask backend API
-                    // Backend deployed on Render for better Flask support
+                    // Use same domain (works on Render or localhost)
                     const API_URL = window.location.hostname === 'localhost'
                         ? 'http://localhost:5000'
-                        : 'https://capm-gordon-api.onrender.com';
+                        : window.location.origin;
                     const response = await fetch(`${API_URL}/api/valuation/${ticker.toUpperCase()}?market=${market}`);
 
                     // Check if the API request was successful
