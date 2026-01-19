@@ -94,8 +94,10 @@
 
                 try {
                     // Call Flask backend API
-                    // For Vercel deployment, use relative path. For local dev, use localhost
-                    const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000' : '';
+                    // Backend deployed on Render for better Flask support
+                    const API_URL = window.location.hostname === 'localhost'
+                        ? 'http://localhost:5000'
+                        : 'https://capm-gordon-api.onrender.com';
                     const response = await fetch(`${API_URL}/api/valuation/${ticker.toUpperCase()}?market=${market}`);
 
                     // Check if the API request was successful
