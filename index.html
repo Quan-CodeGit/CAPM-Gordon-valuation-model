@@ -18,6 +18,9 @@
     <!-- Vercel Web Analytics (works with plain HTML) -->
     <script defer src="https://va.vercel-scripts.com/v1/script.debug.js"></script>
 
+    <!-- Configuration -->
+    <script src="config.js"></script>
+
     <style>
         body {
             margin: 0;
@@ -94,10 +97,10 @@
 
                 try {
                     // Call Flask backend API
-                    // Use same domain (works on Render or localhost)
+                    // Support multiple deployment options
                     const API_URL = window.location.hostname === 'localhost'
                         ? 'http://localhost:5000'
-                        : window.location.origin;
+                        : (window.CONFIG?.BACKEND_URL || window.location.origin);
                     const response = await fetch(`${API_URL}/api/valuation/${ticker.toUpperCase()}?market=${market}`);
 
                     // Check if the API request was successful
