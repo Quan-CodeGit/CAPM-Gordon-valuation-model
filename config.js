@@ -8,5 +8,5 @@ window.CONFIG = {
     // 3. Replit: 'https://your-app.your-username.repl.co'
     // 4. Leave empty to use same domain: ''
 
-    BACKEND_URL: ''  // Change this to your backend URL
+    BACKEND_URL: 'http://localhost:5000'  // For local development
 };
