@@ -364,8 +364,8 @@ def get_valuation(ticker):
             market_return = 0.095    # ASX 200 historical return ~9.5%
             currency = 'AUD'
 
-            # Australian stocks use similar dividend handling as US stocks
-            # Get dividend growth from yfinance historical data
+            # Australian stocks typically have very consistent dividends (including franking credits)
+            # Don't flag irregular dividends for AU stocks - they have a strong dividend culture
             irregular_dividend = False
             dividend_consistency_issues = []
 
@@ -390,6 +390,7 @@ def get_valuation(ticker):
                     dividend_growth = 0.03
             except:
                 dividend_growth = 0.03
+                yf_stock = None  # Make sure yf_stock is defined even if exception occurs
 
         # Handle Vietnamese stock dividend data
         if is_vn_stock:
@@ -483,7 +484,7 @@ def get_valuation(ticker):
                                 div_mean = non_zero_divs.mean()
                                 if div_mean > 0:
                                     cv = div_std / div_mean
-                                    if cv > 0.5:  # High volatility threshold
+                                    if cv > 0.75:  # High volatility threshold (increased from 0.5 to be less strict)
                                         irregular_dividend = True
                                         dividend_consistency_issues.append("High dividend volatility")
 
@@ -491,8 +492,8 @@ def get_valuation(ticker):
                             dividend_growth = (latest / previous) - 1
                             print(f"Calculated dividend growth from history: {dividend_growth*100:.1f}%")
 
-                            # Check for extreme growth rates
-                            if abs(dividend_growth) > 0.5:  # More than 50% change
+                            # Check for extreme growth rates (only flag very unusual changes)
+                            if abs(dividend_growth) > 1.0:  # More than 100% change (doubled or halved)
                                 irregular_dividend = True
                                 dividend_consistency_issues.append(f"Extreme growth rate: {dividend_growth*100:.1f}%")
                         else:
@@ -564,7 +565,7 @@ def get_valuation(ticker):
         pe_ratio = None
         theoretical_pe = None
 
-        print(f"[DEBUG] Starting P/E calculation for {ticker}, is_vn_stock={is_vn_stock}")
+        print(f"[DEBUG] Starting P/E calculation for {ticker}, is_vn_stock={is_vn_stock}, is_au_stock={is_au_stock}")
 
         try:
             if not is_vn_stock:
@@ -573,10 +574,13 @@ def get_valuation(ticker):
                 eps = None
                 import requests
 
+                # Format ticker for Yahoo Finance API (add .AX for Australian stocks)
+                yf_ticker = ticker + ".AX" if is_au_stock else ticker
+
                 # Method 1: Yahoo Finance API (unlimited, free)
                 try:
-                    print(f"Trying Yahoo Finance API...")
-                    yf_api_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=defaultKeyStatistics,financialData"
+                    print(f"Trying Yahoo Finance API for {yf_ticker}...")
+                    yf_api_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{yf_ticker}?modules=defaultKeyStatistics,financialData"
                     headers = {'User-Agent': 'Mozilla/5.0'}
                     response = requests.get(yf_api_url, headers=headers, timeout=5)
                     data = response.json()
@@ -639,7 +643,7 @@ def get_valuation(ticker):
                         # Get ROE - try Yahoo Finance first, then Alpha Vantage
                         try:
                             # Try Yahoo Finance API first (unlimited)
-                            yf_api_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=financialData"
+                            yf_api_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{yf_ticker}?modules=financialData"
                             response = requests.get(yf_api_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
                             data = response.json()
 
