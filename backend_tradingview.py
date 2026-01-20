@@ -44,27 +44,33 @@ VIETNAMESE_STOCKS = [
     'MWG', 'STB', 'MSN', 'VCB', 'VJC', 'SHB', 'SSI', 'VNM', 'CTG', 'VIB',
     'VRE', 'SSB', 'TPB', 'DGC', 'BID', 'GAS', 'SAB', 'PLX', 'GVR', 'BCM',
     # Additional Banking
-    'EIB', 'VIB',
+    'EIB', 'KBC', 'OCB', 'LPB', 'TPB', 'SHB', 'STB', 'VIB', 'NAB', 'VAB',
     # Additional Real Estate & Construction
-    'NVL', 'KDH', 'DXG', 'PDR', 'DIG', 'HDC', 'CEO', 'NLG',
+    'NVL', 'KDH', 'DXG', 'PDR', 'DIG', 'HDC', 'CEO', 'NLG', 'BCG', 'CTD',
+    'HBC', 'LDG', 'PDR', 'QCG', 'SCR', 'SZC',
     # Additional Food & Beverage
-    'VHC', 'MCH',
+    'VHC', 'MCH', 'VNL', 'BBC', 'SBT', 'KDC',
     # Additional Technology & Telecom
-    'VGI', 'CMG', 'ITD',
+    'VGI', 'CMG', 'ITD', 'CTR', 'ELC', 'FOX',
     # Additional Industrial & Materials
-    'HSG', 'NKG', 'DCM', 'DPM', 'NT2',
+    'HSG', 'NKG', 'DCM', 'DPM', 'NT2', 'HT1', 'VCS', 'VGC', 'VSC', 'VHC',
     # Additional Energy & Utilities
-    'POW', 'PVD', 'PVT', 'BSR', 'PVS', 'PVG',
+    'POW', 'PVD', 'PVT', 'BSR', 'PVS', 'PVG', 'POW', 'GEG', 'PPC', 'NT2',
     # Additional Retail & Consumer
-    'PNJ', 'FRT',
+    'PNJ', 'FRT', 'DGW', 'PET', 'TCM',
     # Additional Securities & Finance
-    'VCI', 'VND', 'HCM', 'MBS', 'VIX',
+    'VCI', 'VND', 'HCM', 'MBS', 'VIX', 'AGR', 'BSI', 'CTS', 'FTS',
     # Additional Insurance
-    'BVH', 'BMI', 'BIC', 'PRE',
+    'BVH', 'BMI', 'BIC', 'PRE', 'PVI', 'MIG',
     # Additional Transportation & Logistics
-    'HVN', 'VTP', 'GMD', 'HAH',
+    'HVN', 'VTP', 'GMD', 'HAH', 'VJC', 'ACV', 'VOS',
+    # Additional Manufacturing & Export
+    'TNG', 'MSH', 'GIL', 'TCL', 'VGT', 'STK',
+    # Additional Agriculture
+    'HNG', 'HAG', 'LSS', 'SBT', 'BAF',
     # Other major stocks
-    'GEX', 'DHG', 'REE', 'DPR', 'PC1', 'VPI'
+    'GEX', 'DHG', 'REE', 'DPR', 'PC1', 'VPI', 'IDC', 'PAN', 'PHR', 'SCS',
+    'TRA', 'VCS', 'VGI', 'VHM', 'VIC', 'VND', 'VNM', 'VSH'
 ]
 
 # Fallback dividend data for major Vietnamese stocks (in actual VND, not thousands)
@@ -200,7 +206,7 @@ def get_tradingview_fundamentals(ticker, tv_symbol):
 
     return None, 0
 
-def get_tradingview_data(ticker, is_vn_stock=False):
+def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
     """
     Fetch stock data from TradingView using tradingview-scraper
     """
@@ -213,15 +219,25 @@ def get_tradingview_data(ticker, is_vn_stock=False):
         if is_vn_stock:
             # Vietnamese stocks on HOSE/HNX
             tv_symbol = f"HOSE:{ticker}"
+        elif is_au_stock:
+            # Australian stocks on ASX
+            tv_symbol = f"ASX:{ticker}"
         else:
             # Try to detect US exchange
             tv_symbol = f"NASDAQ:{ticker}"
 
         overview = Overview()
 
-        # Try multiple exchanges for US stocks
+        # Try multiple exchanges based on market
         data = None
-        for exchange in ['NASDAQ', 'NYSE', 'AMEX'] if not is_vn_stock else ['HOSE', 'HNX']:
+        if is_vn_stock:
+            exchanges = ['HOSE', 'HNX']
+        elif is_au_stock:
+            exchanges = ['ASX']
+        else:
+            exchanges = ['NASDAQ', 'NYSE', 'AMEX']
+
+        for exchange in exchanges:
             try:
                 tv_symbol = f"{exchange}:{ticker}"
                 print(f"Trying {tv_symbol}...")
@@ -285,7 +301,7 @@ def get_valuation(ticker):
     try:
         ticker = ticker.upper()
 
-        # Get market parameter from query string (VN or US)
+        # Get market parameter from query string (VN, US, or AU)
         market = request.args.get('market', 'VN').upper()
         print(f"[REQUEST] Received request for {ticker} (Market: {market})")
 
@@ -299,17 +315,23 @@ def get_valuation(ticker):
 
         time.sleep(1)  # Rate limiting
 
-        # Determine if Vietnamese stock based on market parameter or ticker list
+        # Determine market type based on market parameter or ticker list
         if market == 'VN':
             is_vn_stock = True
+            is_au_stock = False
+        elif market == 'AU':
+            is_vn_stock = False
+            is_au_stock = True
         elif market == 'US':
             is_vn_stock = False
+            is_au_stock = False
         else:
             # Fallback: auto-detect based on ticker list
             is_vn_stock = ticker in VIETNAMESE_STOCKS
+            is_au_stock = False
 
         # Get data from TradingView
-        tv_data = get_tradingview_data(ticker, is_vn_stock)
+        tv_data = get_tradingview_data(ticker, is_vn_stock, is_au_stock)
 
         if not tv_data:
             return jsonify({
@@ -332,6 +354,40 @@ def get_valuation(ticker):
             irregular_dividend = False
             dividend_consistency_issues = []
 
+        elif is_au_stock:
+            risk_free_rate = 0.042   # Australia 10-year bond yield (~4.2%)
+            market_return = 0.095    # ASX 200 historical return ~9.5%
+            currency = 'AUD'
+
+            # Australian stocks use similar dividend handling as US stocks
+            # Get dividend growth from yfinance historical data
+            irregular_dividend = False
+            dividend_consistency_issues = []
+
+            try:
+                import yfinance as yf
+                yf_stock = yf.Ticker(ticker + ".AX")  # Australian stocks need .AX suffix
+                dividends = yf_stock.dividends
+                if len(dividends) >= 2:
+                    annual_divs = dividends.resample('Y').sum()
+                    if len(annual_divs) >= 2:
+                        latest = annual_divs.iloc[-1]
+                        previous = annual_divs.iloc[-2]
+
+                        if previous > 0:
+                            dividend_growth = (latest / previous) - 1
+                            print(f"Calculated AU dividend growth from history: {dividend_growth*100:.1f}%")
+                        else:
+                            dividend_growth = 0.03
+                    else:
+                        dividend_growth = 0.03
+                else:
+                    dividend_growth = 0.03
+            except:
+                dividend_growth = 0.03
+
+        # Handle Vietnamese stock dividend data
+        if is_vn_stock:
             # For Vietnamese stocks, prioritize fallback data over TradingView
             # TradingView's dividend data for VN stocks is often outdated/inaccurate
             # Use fallback data (from company reports) if available

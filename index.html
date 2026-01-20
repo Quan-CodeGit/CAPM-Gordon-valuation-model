@@ -216,6 +216,22 @@
                                             />
                                             <span>United States</span>
                                         </button>
+                                        <button
+                                            onClick={() => setMarket('AU')}
+                                            className={`flex items-center gap-3 px-6 py-3 rounded-lg border-2 font-semibold transition-all ${
+                                                market === 'AU'
+                                                    ? 'bg-green-600 text-white border-green-600 shadow-lg'
+                                                    : 'bg-white text-gray-700 border-gray-300 hover:border-green-600 hover:shadow-md'
+                                            }`}
+                                            disabled={loading}
+                                        >
+                                            <img
+                                                src="https://images.emojiterra.com/twitter/v14.0/1024px/1f1e6-1f1fa.png"
+                                                alt="Australia Flag"
+                                                className="w-8 h-8 rounded-sm"
+                                            />
+                                            <span>Australia</span>
+                                        </button>
                                     </div>
                                 </div>
 
@@ -228,7 +244,7 @@
                                         value={ticker}
                                         onChange={(e) => setTicker(e.target.value.toUpperCase())}
                                         onKeyPress={(e) => e.key === 'Enter' && calculateValuation()}
-                                        placeholder={market === 'VN' ? 'e.g., VNM, VCB, FPT, SAB, GAS, TCB' : 'e.g., AAPL, MSFT, GOOGL, TSLA'}
+                                        placeholder={market === 'VN' ? 'e.g., VNM, VCB, FPT, SAB, GAS, TCB' : market === 'AU' ? 'e.g., CBA, BHP, CSL, WBC, NAB, ANZ' : 'e.g., AAPL, MSFT, GOOGL, TSLA'}
                                         className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none text-lg font-semibold uppercase"
                                         disabled={loading}
                                     />
