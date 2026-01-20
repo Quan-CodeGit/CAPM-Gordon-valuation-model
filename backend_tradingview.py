@@ -464,10 +464,13 @@ def get_valuation(ticker):
             # Get dividend growth from yfinance historical data and save stock object for later
             irregular_dividend = False
             dividend_consistency_issues = []
+            yf_stock = None  # Initialize for P/E analysis later
 
             try:
+                import yfinance as yf
                 yf_stock = yf.Ticker(ticker)
                 dividends = yf_stock.dividends
+
                 if len(dividends) >= 2:
                     # Get last 5 years of annual dividends to check consistency
                     annual_divs = dividends.resample('Y').sum()
@@ -509,13 +512,20 @@ def get_valuation(ticker):
                         dividend_growth = 0.03
                         # Don't flag for limited history - just use default growth
                 else:
+                    # Less than 2 data points - only flag if truly no history
                     dividend_growth = 0.03
-                    irregular_dividend = True
-                    dividend_consistency_issues.append("No dividend history available")
+                    if len(dividends) == 0:
+                        irregular_dividend = True
+                        dividend_consistency_issues.append("No dividend history available")
             except Exception as e:
                 dividend_growth = 0.03  # Estimate 3% growth as fallback
                 print(f"Error fetching dividend data for {ticker}: {e}")
-                # Don't flag irregular if we simply can't fetch data
+                # Create yf_stock anyway for P/E analysis
+                try:
+                    import yfinance as yf
+                    yf_stock = yf.Ticker(ticker)
+                except:
+                    yf_stock = None
 
             currency = 'USD'
 
@@ -569,7 +579,7 @@ def get_valuation(ticker):
         pe_ratio = None
         theoretical_pe = None
 
-        print(f"[DEBUG] Starting P/E calculation for {ticker}, is_vn_stock={is_vn_stock}, is_au_stock={is_au_stock}")
+        print(f"[DEBUG] Starting P/E calculation for {ticker}, is_vn_stock={is_vn_stock}, is_au_stock={is_au_stock}, yf_stock exists: {yf_stock is not None}")
 
         try:
             if not is_vn_stock:
@@ -580,6 +590,7 @@ def get_valuation(ticker):
 
                 # Format ticker for Yahoo Finance API (add .AX for Australian stocks)
                 yf_ticker = ticker + ".AX" if is_au_stock else ticker
+                print(f"[DEBUG] Using ticker symbol: {yf_ticker} for P/E data")
 
                 # Method 1: Yahoo Finance API (unlimited, free)
                 try:
@@ -603,19 +614,27 @@ def get_valuation(ticker):
 
                         if eps:
                             print(f"[OK] EPS from Yahoo Finance API: ${eps:.2f}")
+                        else:
+                            print(f"[WARN] Yahoo API returned data but no EPS found")
+                    else:
+                        print(f"[WARN] Yahoo API response missing quoteSummary data")
                 except Exception as e:
                     print(f"Yahoo Finance API failed: {e}")
 
                 # Method 2: Fallback to yfinance library
                 if not eps and yf_stock:
                     try:
-                        print(f"Trying yfinance library...")
+                        print(f"Trying yfinance library (yf_stock available)...")
                         info = yf_stock.info
                         eps = info.get('trailingEps', None)
                         if eps:
                             print(f"[OK] EPS from yfinance: ${eps:.2f}")
+                        else:
+                            print(f"[WARN] yfinance info has no trailingEps field")
                     except Exception as e:
                         print(f"yfinance failed: {e}")
+                elif not eps:
+                    print(f"[WARN] Skipping yfinance fallback - yf_stock not available")
 
                 # Method 3: Last resort - Alpha Vantage (25/day limit, US stocks only)
                 if not eps and not is_au_stock:  # Alpha Vantage doesn't support AU stocks well
