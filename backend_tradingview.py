@@ -86,6 +86,11 @@ DIVIDEND_FALLBACK = {
     'MBB': {'dividend': 800, 'growth': 0.09},    # Military Bank
     'VHM': {'dividend': 2000, 'growth': 0.03},   # Vinhomes
     'MSN': {'dividend': 1200, 'growth': 0.05},   # Masan
+    'VIC': {'dividend': 1500, 'growth': 0.05},   # Vingroup
+    'PLX': {'dividend': 2000, 'growth': 0.04},   # Petrolimex
+    'BVH': {'dividend': 1800, 'growth': 0.05},   # Bao Viet
+    'KBC': {'dividend': 500, 'growth': 0.07},    # KienLong Bank
+    'PVS': {'dividend': 800, 'growth': 0.04},    # PetroVietnam Services
 }
 
 # CafeF.vn URL mapping for major Vietnamese stocks
@@ -411,7 +416,7 @@ def get_valuation(ticker):
                     # Try to get growth from vnstock
                     _, vn_growth = get_vn_dividend_data(ticker)
                     dividend_growth = vn_growth
-                elif div_yield_pct > 0:
+                elif div_yield_pct is not None and div_yield_pct > 0:
                     # Fall back to calculating from dividend yield
                     # TradingView returns yield as percentage (0.7826 = 0.7826%)
                     # Convert to decimal and calculate dividend
