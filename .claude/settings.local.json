@@ -29,7 +29,10 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd Vercel deployment support\n\n- Add vercel.json for Vercel configuration\n- Update index.html to use relative API paths \\(works on Vercel\\)\n- Add VERCEL_DEPLOY.md with complete deployment guide\n\nDeployment:\n- Single command: vercel --prod\n- Or deploy via Vercel dashboard\n- Gets one URL for both frontend and backend\n- Automatic deployments on git push\n\nBenefits:\n- All-in-one deployment \\(frontend + backend\\)\n- Automatic HTTPS and custom domains\n- Free tier: 100GB bandwidth/month\n- Perfect for private code, public app\n\n🤖 Generated with Claude Code \\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git push:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd Vercel Speed Insights\n\n- Add Speed Insights script to index.html\n- Enable performance monitoring\n- Track Core Web Vitals \\(LCP, FID, CLS\\)\n- View metrics in Vercel dashboard\n\nBenefits:\n- Monitor real user performance\n- Track page load times\n- Identify slow pages\n- Optimize user experience\n\n🤖 Generated with Claude Code \\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(netstat:*)",
+      "Bash(start cmd /k python backend_tradingview.py)",
+      "Bash(del START_BACKEND.bat START_FRONTEND.bat)"
     ]
   }
 }
