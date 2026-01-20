@@ -579,6 +579,10 @@ def get_valuation(ticker):
         pe_ratio = None
         theoretical_pe = None
 
+        # Ensure yf_stock is defined (should be set in market-specific sections above)
+        if 'yf_stock' not in locals():
+            yf_stock = None
+
         print(f"[DEBUG] Starting P/E calculation for {ticker}, is_vn_stock={is_vn_stock}, is_au_stock={is_au_stock}, yf_stock exists: {yf_stock is not None}")
 
         try:
