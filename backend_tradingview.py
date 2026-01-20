@@ -766,8 +766,8 @@ def get_valuation(ticker):
             'priceDifference': float(round(price_difference, 2)),
             'currency': currency,
             'lowDividendWarning': low_dividend_warning,
-            'irregularDividend': irregular_dividend if not is_vn_stock else False,  # Only flag for US stocks
-            'dividendConsistencyIssues': dividend_consistency_issues if not is_vn_stock and irregular_dividend else [],
+            'irregularDividend': irregular_dividend if (not is_vn_stock and not is_au_stock) else False,  # Only flag for US stocks
+            'dividendConsistencyIssues': dividend_consistency_issues if (not is_vn_stock and not is_au_stock and irregular_dividend) else [],
             # P/E Ratio Analysis
             'eps': float(round(eps, 2)) if eps else None,
             'peRatio': float(round(pe_ratio, 2)) if pe_ratio else None,
