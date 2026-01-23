@@ -176,6 +176,76 @@ def get_vn_dividend_data(ticker):
     print(f"No fallback data for {ticker}, using default: 0 VND, 5% growth")
     return 0, 0.05
 
+def get_dividend_growth_from_history(ticker, is_au_stock=False, max_retries=2):
+    """
+    Calculate historical dividend growth (CAGR) from yfinance dividend history
+    Returns (growth_rate, historical_growth, is_capped, warning_message)
+    - growth_rate: The growth rate to use in calculations (may be capped)
+    - historical_growth: The actual historical CAGR
+    - is_capped: True if growth was capped due to being too high
+    - warning_message: Explanation if capped
+    """
+    try:
+        import yfinance as yf
+        import time
+
+        # Format ticker for yfinance
+        yf_ticker = ticker + ".AX" if is_au_stock else ticker
+        print(f"\n[DIVIDEND GROWTH] Fetching dividend history for {yf_ticker}...")
+
+        # Retry logic for rate limiting
+        dividends = None
+        for attempt in range(max_retries):
+            try:
+                stock = yf.Ticker(yf_ticker)
+                dividends = stock.dividends
+                if len(dividends) > 0:
+                    break
+                time.sleep(2)  # Wait before retry
+            except Exception as e:
+                print(f"  Attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(3)
+
+        if dividends is None or len(dividends) < 2:
+            print(f"  [WARN] Insufficient dividend history, using default growth")
+            return 0.03, None, False, None
+
+        # Calculate annual dividends
+        annual_divs = dividends.resample('Y').sum()
+
+        # Need at least 2 years for growth calculation
+        if len(annual_divs) < 2:
+            print(f"  [WARN] Less than 2 years of data, using default growth")
+            return 0.03, None, False, None
+
+        # Calculate CAGR (Compound Annual Growth Rate)
+        # CAGR = (Ending Value / Beginning Value)^(1 / Number of Years) - 1
+        years = len(annual_divs) - 1
+        latest = annual_divs.iloc[-1]
+        oldest = annual_divs.iloc[0]
+
+        if oldest <= 0:
+            print(f"  [WARN] Starting dividend is zero, using YoY growth instead")
+            # Fall back to simple year-over-year growth
+            previous = annual_divs.iloc[-2]
+            if previous > 0:
+                yoy_growth = (latest / previous) - 1
+                print(f"  [OK] YoY Growth: {yoy_growth*100:.1f}%")
+                return yoy_growth, yoy_growth, False, None
+            else:
+                return 0.03, None, False, None
+
+        cagr = (latest / oldest) ** (1 / years) - 1
+        print(f"  [OK] Historical CAGR over {years} years: {cagr*100:.1f}%")
+        print(f"      Dividends: {oldest:.2f} ({annual_divs.index[0].year}) → {latest:.2f} ({annual_divs.index[-1].year})")
+
+        return cagr, cagr, False, None
+
+    except Exception as e:
+        print(f"  [ERROR] Failed to calculate dividend growth: {e}")
+        return 0.03, None, False, None
+
 def get_tradingview_fundamentals(ticker, tv_symbol):
     """
     Get fundamental/dividend data from TradingView
@@ -387,7 +457,9 @@ def get_valuation(ticker):
             # Don't flag irregular dividends for AU stocks - they have a strong dividend culture
             irregular_dividend = False
             dividend_consistency_issues = []
-            dividend_growth = 0.03  # Use 3% default growth for AU stocks
+
+            # Try to calculate historical dividend growth
+            dividend_growth, historical_growth, is_capped, cap_warning = get_dividend_growth_from_history(ticker, is_au_stock=True)
 
             # Create yf_stock for P/E analysis (separate from dividend)
             try:
@@ -459,11 +531,12 @@ def get_valuation(ticker):
 
             market_return = 0.10    # S&P 500 historical ~10%
 
-            # US stocks: Don't flag irregular dividends (yfinance is rate-limited)
-            # Just use TradingView dividend data and default growth
+            # US stocks: Don't flag irregular dividends
             irregular_dividend = False
             dividend_consistency_issues = []
-            dividend_growth = 0.03  # Use 3% default growth for US stocks
+
+            # Try to calculate historical dividend growth
+            dividend_growth, historical_growth, is_capped, cap_warning = get_dividend_growth_from_history(ticker, is_au_stock=False)
 
             # Create yf_stock for P/E analysis only (separate from dividend)
             yf_stock = None
@@ -477,6 +550,26 @@ def get_valuation(ticker):
 
         # Calculate CAPM
         capm_return = risk_free_rate + beta * (market_return - risk_free_rate)
+
+        # Apply capping logic to dividend growth
+        # Gordon Model requires g < r, with safety margin we need g < r - 2%
+        growth_warning = None
+        historical_dividend_growth = historical_growth if 'historical_growth' in locals() else None
+
+        if dividend_growth >= capm_return - 0.02:  # If growth is too close to or exceeds required return
+            print(f"\n[WARNING] Dividend growth ({dividend_growth*100:.1f}%) is too high relative to required return ({capm_return*100:.1f}%)")
+            print(f"          Gordon Model requires g < r. Capping growth rate...")
+
+            # Store the original historical growth for display
+            historical_dividend_growth = dividend_growth
+
+            # Cap growth at the lower of: 5% or (r - 3%)
+            conservative_cap = 0.05  # 5% maximum for stability
+            dynamic_cap = max(capm_return - 0.03, 0.03)  # At least 3% margin, minimum 3% growth
+            dividend_growth = min(conservative_cap, dynamic_cap)
+
+            growth_warning = f"Historical dividend growth ({historical_dividend_growth*100:.1f}%) exceeds sustainable level. Using capped rate ({dividend_growth*100:.1f}%) for valuation. Gordon Model may undervalue high-growth stocks - consider P/E analysis."
+            print(f"          Using capped growth: {dividend_growth*100:.1f}%")
 
         # Calculate Gordon Model
         if dividend_rate > 0:
@@ -538,17 +631,11 @@ def get_valuation(ticker):
                 eps = None
                 import requests
 
-                # Method 0: Try TradingView first (most reliable, already fetched)
-                if tv_data and tv_data.get('eps') and tv_data.get('peRatio'):
-                    eps = tv_data.get('eps')
-                    pe_ratio = tv_data.get('peRatio')
-                    print(f"[OK] Using P/E data from TradingView: EPS=${eps:.2f}, P/E={pe_ratio:.2f}")
-
                 # Format ticker for Yahoo Finance API (add .AX for Australian stocks)
                 yf_ticker = ticker + ".AX" if is_au_stock else ticker
                 print(f"[DEBUG] Using ticker symbol: {yf_ticker} for P/E data")
 
-                # Method 1: Yahoo Finance API (unlimited, free) - only if TradingView didn't have data
+                # Method 1: Yahoo Finance API (prioritize over TradingView for accuracy)
                 if not eps:
                     try:
                         print(f"Trying Yahoo Finance API for {yf_ticker}...")
@@ -607,6 +694,11 @@ def get_valuation(ticker):
                             print(f"[OK] EPS from Alpha Vantage: ${eps:.2f}")
                     except Exception as e:
                         print(f"Alpha Vantage failed: {e}")
+
+                # Method 4: Last resort - use TradingView data if nothing else worked
+                if not eps and tv_data and tv_data.get('eps'):
+                    eps = tv_data.get('eps')
+                    print(f"[FALLBACK] Using EPS from TradingView: ${eps:.2f} (other sources failed)")
 
                 if not eps:
                     print(f"[WARN] Could not fetch EPS for {ticker} from any source")
@@ -739,6 +831,8 @@ def get_valuation(ticker):
             'dividend': float(round(dividend_rate, 2)),
             'dividendD1': float(round(d1 if dividend_rate > 0 else 0, 2)),  # Next year's dividend
             'dividendGrowth': float(round(dividend_growth, 4)),
+            'historicalDividendGrowth': float(round(historical_dividend_growth, 4)) if historical_dividend_growth else None,
+            'growthWarning': growth_warning,
             'capmReturn': float(round(capm_return, 4)),
             'gordonReturn': float(round(gordon_return, 4)),
             'fairPrice': float(round(fair_price, 2)),
