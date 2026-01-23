@@ -266,13 +266,22 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         dividend_yield_percent = data.get('dividends_yield', 0)  # TradingView returns as percentage (0.39 = 0.39%)
         market_cap = data.get('market_cap_basic', 0)
 
+        # Try to get dividend per share (annual) directly from TradingView
+        # This is more accurate than calculating from yield
+        div_per_share_fy = data.get('dividends_per_share_fy', None)  # Fiscal Year annual dividend
+
         # Convert dividend yield from percentage to decimal
         # TradingView returns 0.39 for 0.39%, we need 0.0039 for calculations
         dividend_yield = dividend_yield_percent / 100 if dividend_yield_percent else 0
 
-        # Calculate annual dividend in dollars/VND
-        # Dividend = Price × Yield (as decimal)
-        dividend_rate = current_price * dividend_yield if dividend_yield else 0
+        # Calculate annual dividend - prefer direct DPS if available, otherwise use yield
+        if div_per_share_fy and div_per_share_fy > 0:
+            dividend_rate = div_per_share_fy
+            print(f"  Using direct annual dividend from TradingView: ${dividend_rate:.2f}")
+        else:
+            # Fallback: Calculate from yield
+            dividend_rate = current_price * dividend_yield if dividend_yield else 0
+            print(f"  Calculated dividend from yield: ${dividend_rate:.2f}")
 
         print(f"[OK] Data retrieved:")
         print(f"  Company: {company_name}")
@@ -368,39 +377,14 @@ def get_valuation(ticker):
             # Don't flag irregular dividends for AU stocks - they have a strong dividend culture
             irregular_dividend = False
             dividend_consistency_issues = []
+            dividend_growth = 0.03  # Use 3% default growth for AU stocks
 
+            # Create yf_stock for P/E analysis (separate from dividend)
             try:
                 import yfinance as yf
-                yf_stock = yf.Ticker(ticker + ".AX")  # Australian stocks need .AX suffix
-                dividends = yf_stock.dividends
-                if len(dividends) >= 2:
-                    annual_divs = dividends.resample('Y').sum()
-                    if len(annual_divs) >= 2:
-                        latest = annual_divs.iloc[-1]
-                        previous = annual_divs.iloc[-2]
-
-                        # Use the actual annual dividend from yfinance instead of TradingView
-                        dividend_rate = latest
-                        print(f"Using yfinance annual dividend: ${latest:.2f} AUD")
-
-                        if previous > 0:
-                            dividend_growth = (latest / previous) - 1
-                            print(f"Calculated AU dividend growth from history: {dividend_growth*100:.1f}%")
-                        else:
-                            dividend_growth = 0.03
-                    else:
-                        dividend_growth = 0.03
-                else:
-                    dividend_growth = 0.03
-            except Exception as e:
-                print(f"Error fetching AU dividend data: {e}")
-                dividend_growth = 0.03
-                # Keep yf_stock available for P/E analysis
-                try:
-                    import yfinance as yf
-                    yf_stock = yf.Ticker(ticker + ".AX")
-                except:
-                    yf_stock = None
+                yf_stock = yf.Ticker(ticker + ".AX")
+            except:
+                yf_stock = None
 
         # Handle Vietnamese stock dividend data
         if is_vn_stock:
@@ -465,82 +449,19 @@ def get_valuation(ticker):
 
             market_return = 0.10    # S&P 500 historical ~10%
 
-            # Get dividend growth from yfinance historical data and save stock object for later
+            # US stocks: Don't flag irregular dividends (yfinance is rate-limited)
+            # Just use TradingView dividend data and default growth
             irregular_dividend = False
             dividend_consistency_issues = []
-            yf_stock = None  # Initialize for P/E analysis later
+            dividend_growth = 0.03  # Use 3% default growth for US stocks
 
+            # Create yf_stock for P/E analysis only (separate from dividend)
+            yf_stock = None
             try:
                 import yfinance as yf
                 yf_stock = yf.Ticker(ticker)
-                dividends = yf_stock.dividends
-                print(f"[DEBUG] Fetched {len(dividends)} dividend data points for {ticker}")
-
-                if len(dividends) >= 2:
-                    # Get last 5 years of annual dividends to check consistency
-                    annual_divs = dividends.resample('Y').sum()
-                    if len(annual_divs) >= 2:
-                        latest = annual_divs.iloc[-1]
-                        previous = annual_divs.iloc[-2]
-
-                        # Use the actual annual dividend from yfinance instead of TradingView
-                        dividend_rate = latest
-                        print(f"Using yfinance annual dividend: ${latest:.2f} USD")
-
-                        # Only flag truly problematic patterns (most US dividend stocks should pass)
-                        if len(annual_divs) >= 4:  # Need at least 4 years to assess patterns
-                            # Check for multiple zero dividend years (occasional zero is ok)
-                            zero_years = (annual_divs == 0).sum()
-                            if zero_years >= 2:  # 2 or more zero years indicates real issues
-                                irregular_dividend = True
-                                dividend_consistency_issues.append(f"Multiple zero dividend years ({zero_years})")
-                                print(f"[WARN] Flagged irregular: Multiple zero dividend years ({zero_years})")
-
-                            # Check for extreme volatility only (coefficient of variation)
-                            non_zero_divs = annual_divs[annual_divs > 0]
-                            if len(non_zero_divs) >= 3:
-                                div_std = non_zero_divs.std()
-                                div_mean = non_zero_divs.mean()
-                                if div_mean > 0:
-                                    cv = div_std / div_mean
-                                    if cv > 1.5:  # Only flag extreme volatility (150%+ variation)
-                                        irregular_dividend = True
-                                        dividend_consistency_issues.append("Extreme dividend volatility")
-                                        print(f"[WARN] Flagged irregular: Extreme dividend volatility (CV={cv:.2f})")
-
-                        if previous > 0:
-                            dividend_growth = (latest / previous) - 1
-                            print(f"Calculated dividend growth from history: {dividend_growth*100:.1f}%")
-
-                            # Only flag truly extreme changes (dividend cuts >80% or increases >300%)
-                            if dividend_growth < -0.8 or dividend_growth > 3.0:
-                                irregular_dividend = True
-                                dividend_consistency_issues.append(f"Extreme growth rate: {dividend_growth*100:.1f}%")
-                                print(f"[WARN] Flagged irregular: Extreme growth rate ({dividend_growth*100:.1f}%)")
-                        else:
-                            dividend_growth = 0.03
-                            # Don't flag if previous year was zero - could be a one-time event
-                    else:
-                        dividend_growth = 0.03
-                        # Don't flag for limited history - just use default growth
-                elif len(dividends) == 0:
-                    # Only flag if truly no history at all
-                    dividend_growth = 0.03
-                    irregular_dividend = True
-                    dividend_consistency_issues.append("No dividend history available")
-                    print(f"[WARN] Flagged irregular: No dividend history available")
-                else:
-                    # 1 data point - not enough to assess, but don't flag
-                    dividend_growth = 0.03
-            except Exception as e:
-                dividend_growth = 0.03  # Estimate 3% growth as fallback
-                print(f"Error fetching dividend data for {ticker}: {e}")
-                # Create yf_stock anyway for P/E analysis
-                try:
-                    import yfinance as yf
-                    yf_stock = yf.Ticker(ticker)
-                except:
-                    yf_stock = None
+            except:
+                yf_stock = None
 
             currency = 'USD'
 
