@@ -24,6 +24,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import time
+import json
 from datetime import datetime, timedelta
 import pandas as pd
 
@@ -36,6 +37,38 @@ ALPHA_VANTAGE_API_KEY = "PN4MBNMUOULYYXVC"
 # Cache results
 _cache = {}
 _cache_timeout = 300  # 5 minutes
+
+# Dividend growth cache file
+DIVIDEND_GROWTH_CACHE_FILE = 'dividend_growth_cache.json'
+CACHE_EXPIRY_DAYS = 30  # Refresh dividend growth data every 30 days
+
+def load_dividend_growth_cache():
+    """Load cached dividend growth rates from JSON file"""
+    try:
+        if os.path.exists(DIVIDEND_GROWTH_CACHE_FILE):
+            with open(DIVIDEND_GROWTH_CACHE_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Error loading dividend growth cache: {e}")
+    return {}
+
+def save_dividend_growth_cache(cache):
+    """Save dividend growth rates to JSON file"""
+    try:
+        with open(DIVIDEND_GROWTH_CACHE_FILE, 'w') as f:
+            json.dump(cache, f, indent=2)
+    except Exception as e:
+        print(f"Error saving dividend growth cache: {e}")
+
+def is_cache_expired(timestamp_str, days=CACHE_EXPIRY_DAYS):
+    """Check if cached data is older than specified days"""
+    try:
+        from datetime import datetime
+        cached_date = datetime.fromisoformat(timestamp_str)
+        age = datetime.now() - cached_date
+        return age.days > days
+    except:
+        return True  # If parsing fails, consider it expired
 
 # Vietnamese stocks list (VN30 + additional major stocks)
 VIETNAMESE_STOCKS = [
@@ -206,7 +239,7 @@ def get_vn_dividend_data(ticker):
 
 def get_dividend_growth_from_history(ticker, is_au_stock=False, max_retries=2):
     """
-    Calculate historical dividend growth from database or yfinance
+    Calculate historical dividend growth with automatic caching
     Returns (growth_rate, historical_growth, is_capped, warning_message)
     - growth_rate: The growth rate to use in calculations (may be capped)
     - historical_growth: The actual historical CAGR
@@ -214,14 +247,34 @@ def get_dividend_growth_from_history(ticker, is_au_stock=False, max_retries=2):
     - warning_message: Explanation if capped
     """
 
-    # Priority 1: Check database for pre-calculated growth rates
+    # Load cache
+    cache = load_dividend_growth_cache()
+
+    # Priority 1: Check cache for recent data
+    if ticker in cache:
+        cache_entry = cache[ticker]
+        if not is_cache_expired(cache_entry.get('timestamp', '')):
+            growth = cache_entry.get('growth', 0.03)
+            print(f"\n[DIVIDEND GROWTH] Using cached value for {ticker}: {growth*100:.1f}% (age: {cache_entry.get('timestamp', 'unknown')})")
+            return growth, growth, False, None
+        else:
+            print(f"\n[DIVIDEND GROWTH] Cache expired for {ticker}, fetching fresh data...")
+
+    # Priority 2: Check manual database for known stocks
     if ticker in DIVIDEND_GROWTH_DATABASE:
         growth = DIVIDEND_GROWTH_DATABASE[ticker]
         print(f"\n[DIVIDEND GROWTH] Using database value for {ticker}: {growth*100:.1f}%")
+        # Save to cache
+        cache[ticker] = {
+            'growth': growth,
+            'timestamp': datetime.now().isoformat(),
+            'source': 'manual_database'
+        }
+        save_dividend_growth_cache(cache)
         return growth, growth, False, None
 
-    # Priority 2: Try yfinance (but it's likely blocked)
-    print(f"\n[DIVIDEND GROWTH] {ticker} not in database, trying yfinance...")
+    # Priority 3: Try yfinance
+    print(f"\n[DIVIDEND GROWTH] {ticker} not in cache/database, trying yfinance...")
     try:
         import yfinance as yf
         import time
@@ -277,10 +330,21 @@ def get_dividend_growth_from_history(ticker, is_au_stock=False, max_retries=2):
         print(f"  [OK] Historical CAGR over {years} years: {cagr*100:.1f}%")
         print(f"      Dividends: {oldest:.2f} ({annual_divs.index[0].year}) → {latest:.2f} ({annual_divs.index[-1].year})")
 
+        # Save to cache for future use
+        cache[ticker] = {
+            'growth': cagr,
+            'timestamp': datetime.now().isoformat(),
+            'source': 'yfinance',
+            'years': years
+        }
+        save_dividend_growth_cache(cache)
+        print(f"  [CACHE] Saved growth rate to cache (expires in {CACHE_EXPIRY_DAYS} days)")
+
         return cagr, cagr, False, None
 
     except Exception as e:
         print(f"  [ERROR] Failed to calculate dividend growth: {e}")
+        # Don't cache failures
         return 0.03, None, False, None
 
 def get_tradingview_fundamentals(ticker, tv_symbol):
