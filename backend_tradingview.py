@@ -379,6 +379,10 @@ def get_valuation(ticker):
                         latest = annual_divs.iloc[-1]
                         previous = annual_divs.iloc[-2]
 
+                        # Use the actual annual dividend from yfinance instead of TradingView
+                        dividend_rate = latest
+                        print(f"Using yfinance annual dividend: ${latest:.2f} AUD")
+
                         if previous > 0:
                             dividend_growth = (latest / previous) - 1
                             print(f"Calculated AU dividend growth from history: {dividend_growth*100:.1f}%")
@@ -470,6 +474,7 @@ def get_valuation(ticker):
                 import yfinance as yf
                 yf_stock = yf.Ticker(ticker)
                 dividends = yf_stock.dividends
+                print(f"[DEBUG] Fetched {len(dividends)} dividend data points for {ticker}")
 
                 if len(dividends) >= 2:
                     # Get last 5 years of annual dividends to check consistency
@@ -478,6 +483,10 @@ def get_valuation(ticker):
                         latest = annual_divs.iloc[-1]
                         previous = annual_divs.iloc[-2]
 
+                        # Use the actual annual dividend from yfinance instead of TradingView
+                        dividend_rate = latest
+                        print(f"Using yfinance annual dividend: ${latest:.2f} USD")
+
                         # Only flag truly problematic patterns (most US dividend stocks should pass)
                         if len(annual_divs) >= 4:  # Need at least 4 years to assess patterns
                             # Check for multiple zero dividend years (occasional zero is ok)
@@ -485,6 +494,7 @@ def get_valuation(ticker):
                             if zero_years >= 2:  # 2 or more zero years indicates real issues
                                 irregular_dividend = True
                                 dividend_consistency_issues.append(f"Multiple zero dividend years ({zero_years})")
+                                print(f"[WARN] Flagged irregular: Multiple zero dividend years ({zero_years})")
 
                             # Check for extreme volatility only (coefficient of variation)
                             non_zero_divs = annual_divs[annual_divs > 0]
@@ -496,6 +506,7 @@ def get_valuation(ticker):
                                     if cv > 1.5:  # Only flag extreme volatility (150%+ variation)
                                         irregular_dividend = True
                                         dividend_consistency_issues.append("Extreme dividend volatility")
+                                        print(f"[WARN] Flagged irregular: Extreme dividend volatility (CV={cv:.2f})")
 
                         if previous > 0:
                             dividend_growth = (latest / previous) - 1
@@ -505,18 +516,22 @@ def get_valuation(ticker):
                             if dividend_growth < -0.8 or dividend_growth > 3.0:
                                 irregular_dividend = True
                                 dividend_consistency_issues.append(f"Extreme growth rate: {dividend_growth*100:.1f}%")
+                                print(f"[WARN] Flagged irregular: Extreme growth rate ({dividend_growth*100:.1f}%)")
                         else:
                             dividend_growth = 0.03
                             # Don't flag if previous year was zero - could be a one-time event
                     else:
                         dividend_growth = 0.03
                         # Don't flag for limited history - just use default growth
-                else:
-                    # Less than 2 data points - only flag if truly no history
+                elif len(dividends) == 0:
+                    # Only flag if truly no history at all
                     dividend_growth = 0.03
-                    if len(dividends) == 0:
-                        irregular_dividend = True
-                        dividend_consistency_issues.append("No dividend history available")
+                    irregular_dividend = True
+                    dividend_consistency_issues.append("No dividend history available")
+                    print(f"[WARN] Flagged irregular: No dividend history available")
+                else:
+                    # 1 data point - not enough to assess, but don't flag
+                    dividend_growth = 0.03
             except Exception as e:
                 dividend_growth = 0.03  # Estimate 3% growth as fallback
                 print(f"Error fetching dividend data for {ticker}: {e}")
