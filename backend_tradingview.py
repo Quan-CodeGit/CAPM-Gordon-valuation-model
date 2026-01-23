@@ -266,6 +266,10 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         dividend_yield_percent = data.get('dividends_yield', 0)  # TradingView returns as percentage (0.39 = 0.39%)
         market_cap = data.get('market_cap_basic', 0)
 
+        # Try to get P/E and EPS from TradingView
+        pe_ratio_tv = data.get('price_earnings_ttm', None)  # Trailing 12-month P/E
+        eps_tv = data.get('earnings_per_share_diluted_ttm', None)  # Trailing EPS
+
         # Try to get dividend per share (annual) directly from TradingView
         # This is more accurate than calculating from yield
         div_per_share_fy = data.get('dividends_per_share_fy', None)  # Fiscal Year annual dividend
@@ -289,6 +293,10 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         print(f"  Beta: {beta}")
         print(f"  Dividend Yield: {dividend_yield_percent}% -> {dividend_yield:.4f} (decimal)")
         print(f"  Annual Dividend: {dividend_rate:.2f}")
+        if pe_ratio_tv:
+            print(f"  P/E Ratio (TradingView): {pe_ratio_tv:.2f}")
+        if eps_tv:
+            print(f"  EPS (TradingView): ${eps_tv:.2f}")
 
         return {
             'currentPrice': current_price,
@@ -297,6 +305,8 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
             'dividend': dividend_rate,
             'dividendYield': dividend_yield,
             'marketCap': market_cap,
+            'peRatio': pe_ratio_tv,  # Add P/E from TradingView
+            'eps': eps_tv,  # Add EPS from TradingView
             'source': f'TradingView ({tv_symbol})'
         }
 
@@ -528,38 +538,45 @@ def get_valuation(ticker):
                 eps = None
                 import requests
 
+                # Method 0: Try TradingView first (most reliable, already fetched)
+                if tv_data and tv_data.get('eps') and tv_data.get('peRatio'):
+                    eps = tv_data.get('eps')
+                    pe_ratio = tv_data.get('peRatio')
+                    print(f"[OK] Using P/E data from TradingView: EPS=${eps:.2f}, P/E={pe_ratio:.2f}")
+
                 # Format ticker for Yahoo Finance API (add .AX for Australian stocks)
                 yf_ticker = ticker + ".AX" if is_au_stock else ticker
                 print(f"[DEBUG] Using ticker symbol: {yf_ticker} for P/E data")
 
-                # Method 1: Yahoo Finance API (unlimited, free)
-                try:
-                    print(f"Trying Yahoo Finance API for {yf_ticker}...")
-                    yf_api_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{yf_ticker}?modules=defaultKeyStatistics,financialData"
-                    headers = {'User-Agent': 'Mozilla/5.0'}
-                    response = requests.get(yf_api_url, headers=headers, timeout=5)
-                    data = response.json()
+                # Method 1: Yahoo Finance API (unlimited, free) - only if TradingView didn't have data
+                if not eps:
+                    try:
+                        print(f"Trying Yahoo Finance API for {yf_ticker}...")
+                        yf_api_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{yf_ticker}?modules=defaultKeyStatistics,financialData"
+                        headers = {'User-Agent': 'Mozilla/5.0'}
+                        response = requests.get(yf_api_url, headers=headers, timeout=5)
+                        data = response.json()
 
-                    if 'quoteSummary' in data and data['quoteSummary']['result']:
-                        result = data['quoteSummary']['result'][0]
+                        if 'quoteSummary' in data and data['quoteSummary']['result']:
+                            result = data['quoteSummary']['result'][0]
 
-                        # Get EPS from defaultKeyStatistics
-                        if 'defaultKeyStatistics' in result:
-                            stats = result['defaultKeyStatistics']
-                            eps_raw = stats.get('trailingEps', {})
-                            if isinstance(eps_raw, dict):
-                                eps = eps_raw.get('raw', None)
+                            # Get EPS from defaultKeyStatistics
+                            if 'defaultKeyStatistics' in result:
+                                stats = result['defaultKeyStatistics']
+                                eps_raw = stats.get('trailingEps', {})
+                                if isinstance(eps_raw, dict):
+                                    eps = eps_raw.get('raw', None)
+                                else:
+                                    eps = eps_raw
+
+                            if eps:
+                                print(f"[OK] EPS from Yahoo Finance API: ${eps:.2f}")
                             else:
-                                eps = eps_raw
-
-                        if eps:
-                            print(f"[OK] EPS from Yahoo Finance API: ${eps:.2f}")
+                                print(f"[WARN] Yahoo API returned data but no EPS found")
                         else:
-                            print(f"[WARN] Yahoo API returned data but no EPS found")
-                    else:
-                        print(f"[WARN] Yahoo API response missing quoteSummary data")
-                except Exception as e:
-                    print(f"Yahoo Finance API failed: {e}")
+                            print(f"[WARN] Yahoo API response missing quoteSummary data")
+                    except Exception as e:
+                        print(f"Yahoo Finance API failed: {e}")
 
                 # Method 2: Fallback to yfinance library
                 if not eps and yf_stock:
