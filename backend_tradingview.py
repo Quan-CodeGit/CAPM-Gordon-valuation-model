@@ -539,6 +539,10 @@ def get_valuation(ticker):
         dividend_rate = tv_data['dividend']
         yf_stock = None  # Initialize yfinance stock object for US stocks
 
+        # Initialize variables that will be set in market-specific sections
+        historical_growth = None  # Will be set for AU/US stocks
+        dividend_growth = 0.05    # Default, will be overwritten
+
         # Set appropriate rates based on market
         if is_vn_stock:
             risk_free_rate = 0.0416  # Vietnam 10-year bond yield (Jan 2026: 4.16%)
@@ -655,7 +659,7 @@ def get_valuation(ticker):
         # Apply capping logic to dividend growth
         # Gordon Model requires g < r, with safety margin we need g < r - 2%
         growth_warning = None
-        historical_dividend_growth = historical_growth if 'historical_growth' in locals() else None
+        historical_dividend_growth = historical_growth  # Already initialized at top of function
 
         if dividend_growth >= capm_return - 0.02:  # If growth is too close to or exceeds required return
             print(f"\n[WARNING] Dividend growth ({dividend_growth*100:.1f}%) is too high relative to required return ({capm_return*100:.1f}%)")
@@ -719,10 +723,7 @@ def get_valuation(ticker):
         pe_ratio = None
         theoretical_pe = None
 
-        # Ensure yf_stock is defined (should be set in market-specific sections above)
-        if 'yf_stock' not in locals():
-            yf_stock = None
-
+        # yf_stock is initialized at line 540 and set in market-specific sections above
         print(f"[DEBUG] Starting P/E calculation for {ticker}, is_vn_stock={is_vn_stock}, is_au_stock={is_au_stock}, yf_stock exists: {yf_stock is not None}")
 
         try:
