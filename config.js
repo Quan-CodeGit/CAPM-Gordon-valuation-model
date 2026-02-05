@@ -15,7 +15,7 @@ window.CONFIG = {
     // For Render-only deployment (both frontend and backend on same URL):
     // BACKEND_URL: ''
 
-    // Current setting: Use Render backend
+    // Current setting: PythonAnywhere (same-origin)
     // NOTE: For local development, the hostname check in index.html overrides this
-    BACKEND_URL: 'https://capm-gordon-valuation-model.onrender.com'
+    BACKEND_URL: ''
 };
