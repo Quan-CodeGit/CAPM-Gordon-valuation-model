@@ -3,7 +3,11 @@ services:
   - type: web
     name: capm-gordon-api
     runtime: python
-    buildCommand: pip install --upgrade pip setuptools wheel && pip install --no-cache-dir -r requirements_tradingview.txt
+    buildCommand: |
+      pip install --upgrade pip setuptools wheel
+      pip install flask flask-cors gunicorn requests beautifulsoup4 lxml pandas numpy yfinance
+      pip install tradingview-scraper || echo "tradingview-scraper install failed, continuing..."
+      pip install vnstock3 || echo "vnstock3 install failed, continuing..."
     startCommand: gunicorn backend_tradingview:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     envVars:
       - key: PYTHON_VERSION
