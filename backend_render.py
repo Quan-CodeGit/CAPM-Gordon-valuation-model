@@ -227,14 +227,19 @@ def get_valuation(ticker):
 
                 # TradingView returns VN EPS in thousands, need to multiply by 1000
                 eps = tv_data['eps']
-                if eps and eps > 0 and eps < 100:
-                    # Likely in thousands, convert to actual VND
-                    eps = eps * 1000
+                if eps and eps > 0:
+                    if eps < 1000:
+                        # Likely in thousands, convert to actual VND
+                        eps = eps * 1000
+                    print(f"[DEBUG] {ticker} EPS from TradingView: {eps}")
 
                 # Get P/E from TradingView or calculate it
                 pe_ratio = tv_data['peRatio']
-                if not pe_ratio and eps and eps > 0:
+                if pe_ratio:
+                    print(f"[DEBUG] {ticker} P/E from TradingView: {pe_ratio}")
+                elif eps and eps > 0:
                     pe_ratio = current_price / eps
+                    print(f"[DEBUG] {ticker} P/E calculated: {pe_ratio}")
 
                 # Get dividend growth from fallback if available, else default
                 if ticker in DIVIDEND_FALLBACK_VN:
@@ -317,16 +322,22 @@ def get_valuation(ticker):
         elif current_price > 0 and (dividend_rate / current_price) < 0.01:
             low_dividend_warning = "Low dividend yield - Gordon Model may not be appropriate"
 
-        # P/E calculations
+        # P/E calculations - show P/E even without dividends
         payout_ratio = None
         retention_ratio = None
         theoretical_pe = None
 
-        if eps and eps > 0 and dividend_rate > 0:
-            payout_ratio = dividend_rate / eps
-            retention_ratio = 1 - payout_ratio
-            if capm_return > dividend_growth:
-                theoretical_pe = payout_ratio / (capm_return - dividend_growth)
+        if eps and eps > 0:
+            # Calculate payout ratio if dividends exist
+            if dividend_rate > 0:
+                payout_ratio = dividend_rate / eps
+                retention_ratio = 1 - payout_ratio
+                if capm_return > dividend_growth:
+                    theoretical_pe = payout_ratio / (capm_return - dividend_growth)
+
+            # Calculate P/E if not already set
+            if not pe_ratio:
+                pe_ratio = current_price / eps
 
         result = {
             'ticker': ticker,
