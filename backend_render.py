@@ -217,10 +217,24 @@ def get_valuation(ticker):
                 current_price = tv_data['currentPrice']
                 beta = tv_data['beta']
                 company_name = tv_data['companyName']
-                dividend_rate = tv_data['dividend']
-                eps = tv_data['eps']
-                pe_ratio = tv_data['peRatio']
                 source = tv_data['source']
+
+                # TradingView returns VN dividends in thousands, need to multiply by 1000
+                dividend_rate = tv_data['dividend']
+                if dividend_rate and dividend_rate > 0 and dividend_rate < 100:
+                    # Likely in thousands, convert to actual VND
+                    dividend_rate = dividend_rate * 1000
+
+                # TradingView returns VN EPS in thousands, need to multiply by 1000
+                eps = tv_data['eps']
+                if eps and eps > 0 and eps < 100:
+                    # Likely in thousands, convert to actual VND
+                    eps = eps * 1000
+
+                # Get P/E from TradingView or calculate it
+                pe_ratio = tv_data['peRatio']
+                if not pe_ratio and eps and eps > 0:
+                    pe_ratio = current_price / eps
 
                 # Get dividend growth from fallback if available, else default
                 if ticker in DIVIDEND_FALLBACK_VN:
