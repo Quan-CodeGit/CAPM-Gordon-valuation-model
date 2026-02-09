@@ -6,5 +6,5 @@ services:
     startCommand: gunicorn backend_tradingview:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.12
+        value: 3.11.6
     autoDeploy: true

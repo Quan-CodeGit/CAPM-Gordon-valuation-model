@@ -8,11 +8,13 @@ requests>=2.31.0
 beautifulsoup4>=4.12.2
 lxml>=4.9.4
 
-# Data processing - use flexible versions for Python 3.13 compatibility
+# Data processing
 pandas>=2.0.0
 numpy>=1.26.0
 
 # Stock data APIs
 yfinance>=0.2.36
 tradingview-scraper>=0.5.0
-vnstock3>=0.3.0.5
+
+# Vietnamese stocks (optional - will use fallback if fails)
+# vnstock3>=0.3.0.5
