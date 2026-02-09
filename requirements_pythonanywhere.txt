@@ -1,0 +1,16 @@
+# Requirements for PythonAnywhere (Python 3.10 compatible)
+# Note: tradingview-scraper requires Python 3.11+, so we use yfinance as fallback
+
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# HTTP and parsing
+requests>=2.31.0
+beautifulsoup4>=4.12.2
+
+# Data processing (use versions compatible with Python 3.10)
+pandas
+numpy
+
+# Stock data APIs (yfinance works on Python 3.10)
+yfinance>=0.2.36
