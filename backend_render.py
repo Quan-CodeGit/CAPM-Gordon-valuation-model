@@ -208,9 +208,27 @@ def get_valuation(ticker):
         is_vn_stock = market == 'VN'
         is_au_stock = market == 'AU'
 
-        # Vietnamese stocks - use fallback
+        # Vietnamese stocks - try TradingView first, fallback if fails
         if is_vn_stock:
-            if ticker in DIVIDEND_FALLBACK_VN:
+            tv_data = get_tradingview_data(ticker, is_vn_stock=True)
+
+            if tv_data and tv_data['currentPrice'] > 0:
+                # Use TradingView data
+                current_price = tv_data['currentPrice']
+                beta = tv_data['beta']
+                company_name = tv_data['companyName']
+                dividend_rate = tv_data['dividend']
+                eps = tv_data['eps']
+                pe_ratio = tv_data['peRatio']
+                source = tv_data['source']
+
+                # Get dividend growth from fallback if available, else default
+                if ticker in DIVIDEND_FALLBACK_VN:
+                    dividend_growth = DIVIDEND_FALLBACK_VN[ticker]['growth']
+                else:
+                    dividend_growth = 0.05
+            elif ticker in DIVIDEND_FALLBACK_VN:
+                # Fallback to database if TradingView fails
                 fallback = DIVIDEND_FALLBACK_VN[ticker]
                 current_price = fallback['price']
                 beta = fallback['beta']
@@ -219,21 +237,9 @@ def get_valuation(ticker):
                 company_name = fallback['name']
                 eps = None
                 pe_ratio = None
-                source = 'Fallback Database'
+                source = 'Fallback Database (TradingView unavailable)'
             else:
-                # Try TradingView for VN stocks
-                tv_data = get_tradingview_data(ticker, is_vn_stock=True)
-                if tv_data:
-                    current_price = tv_data['currentPrice']
-                    beta = tv_data['beta']
-                    company_name = tv_data['companyName']
-                    dividend_rate = tv_data['dividend']
-                    eps = tv_data['eps']
-                    pe_ratio = tv_data['peRatio']
-                    dividend_growth = 0.05
-                    source = tv_data['source']
-                else:
-                    return jsonify({'error': f'Stock {ticker} not found'}), 400
+                return jsonify({'error': f'Stock {ticker} not found on TradingView or in database'}), 400
 
             risk_free_rate = 0.0416
             market_return = 0.09
