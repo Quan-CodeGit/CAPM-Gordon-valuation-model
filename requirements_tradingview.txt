@@ -14,5 +14,5 @@ numpy>=1.26.0
 
 # Stock data APIs
 yfinance>=0.2.36
-tradingview-scraper>=0.5.0
-vnstock3>=0.3.0.5
+tradingview-scraper==0.4.20
+# vnstock3>=0.3.0.5  # Commented out for Render compatibility
