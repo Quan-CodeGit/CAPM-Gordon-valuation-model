@@ -110,13 +110,29 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         if not data:
             return None
 
+        # Debug: Print all available fields for VN stocks
+        if is_vn_stock:
+            eps_fields = [k for k in data.keys() if 'eps' in k.lower() or 'earning' in k.lower()]
+            pe_fields = [k for k in data.keys() if 'p/e' in k.lower() or 'pe' in k.lower() or 'price_earning' in k.lower()]
+            print(f"[DEBUG TV] {ticker} EPS-related fields: {eps_fields}")
+            print(f"[DEBUG TV] {ticker} P/E-related fields: {pe_fields}")
+            print(f"[DEBUG TV] {ticker} earnings_per_share_diluted_ttm = {data.get('earnings_per_share_diluted_ttm')}")
+            print(f"[DEBUG TV] {ticker} earnings_per_share_basic_ttm = {data.get('earnings_per_share_basic_ttm')}")
+            print(f"[DEBUG TV] {ticker} price_earnings_ttm = {data.get('price_earnings_ttm')}")
+
         current_price = data.get('close', 0)
         beta = data.get('beta_1_year', 1.0)
         company_name = data.get('description', ticker)
         dividend_yield_percent = data.get('dividends_yield', 0)
         div_per_share_fy = data.get('dividends_per_share_fy', None)
         pe_ratio = data.get('price_earnings_ttm', None)
+
+        # Try multiple EPS fields
         eps = data.get('earnings_per_share_diluted_ttm', None)
+        if not eps:
+            eps = data.get('earnings_per_share_basic_ttm', None)
+        if not eps:
+            eps = data.get('earnings_per_share_fq', None)
 
         dividend_yield = dividend_yield_percent / 100 if dividend_yield_percent else 0
 
