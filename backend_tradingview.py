@@ -933,14 +933,21 @@ def get_valuation(ticker):
                     print(f"Error getting vnstock data for {ticker}: {e}")
 
                 # Fallback: Use TradingView EPS if vnstock failed
-                # TradingView API returns VN stock EPS in USD, convert to VND
+                # Method 1: If P/E available, derive EPS = Price / P/E (exact VND)
+                # Method 2: Convert EPS from USD to VND using exchange rate
                 if not vnstock_success and tv_data:
+                    tv_pe = tv_data.get('peRatio')
                     tv_raw_eps = tv_data.get('eps')  # EPS in USD
-                    if tv_raw_eps and tv_raw_eps > 0:
+
+                    if tv_pe and tv_pe > 0 and current_price > 0:
+                        eps = current_price / tv_pe
+                        pe_ratio = tv_pe
+                        print(f"[FALLBACK] EPS from P/E: {current_price} / {tv_pe:.2f} = {eps:.0f} VND")
+                    elif tv_raw_eps and tv_raw_eps > 0:
                         usd_vnd_rate = get_usd_vnd_rate()
                         eps = tv_raw_eps * usd_vnd_rate
                         pe_ratio = current_price / eps if eps > 0 else None
-                        print(f"[FALLBACK] EPS from TradingView: {tv_raw_eps} USD × {usd_vnd_rate} = {eps:.0f} VND" + (f", P/E = {pe_ratio:.2f}" if pe_ratio else ""))
+                        print(f"[FALLBACK] EPS from USD: {tv_raw_eps:.4f} × {usd_vnd_rate} = {eps:.0f} VND" + (f", P/E = {pe_ratio:.2f}" if pe_ratio else ""))
 
                 # Calculate payout ratio and other metrics if we have EPS
                 if eps and eps > 0:

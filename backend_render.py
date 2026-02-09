@@ -270,18 +270,29 @@ def get_valuation(ticker):
                 # No conversion needed since close is already in VND
                 dividend_rate = tv_data['dividend']
 
-                # TradingView API returns VN stock EPS in USD, need to convert to VND
-                # e.g., VCB EPS = 0.16 USD × 25,500 = ~4,080 VND (actual: ~4,210 VND)
+                # Get EPS in VND from TradingView
+                # Method 1 (preferred): If TradingView provides P/E, derive EPS = Price / P/E
+                #   This gives exact VND values matching TradingView's website
+                # Method 2 (fallback): Convert EPS from USD to VND using exchange rate
+                #   TradingView API returns VN EPS in USD, so slight rounding difference
+                tv_pe = tv_data['peRatio']
                 raw_eps = tv_data['eps']  # EPS in USD
-                if raw_eps and raw_eps > 0:
+
+                if tv_pe and tv_pe > 0 and current_price > 0:
+                    # Best: derive EPS directly from P/E (exact match with TradingView website)
+                    eps = current_price / tv_pe
+                    pe_ratio = tv_pe
+                    print(f"[DEBUG] {ticker} EPS from P/E: {current_price} / {tv_pe:.2f} = {eps:.0f} VND")
+                elif raw_eps and raw_eps > 0:
+                    # Fallback: convert EPS from USD to VND
                     usd_vnd_rate = get_usd_vnd_rate()
                     eps = raw_eps * usd_vnd_rate
                     pe_ratio = current_price / eps if eps > 0 else None
-                    print(f"[DEBUG] {ticker} EPS: {raw_eps} USD × {usd_vnd_rate} = {eps:.0f} VND, P/E = {pe_ratio:.2f}" if pe_ratio else f"[DEBUG] {ticker} EPS: {raw_eps} USD × {usd_vnd_rate} = {eps:.0f} VND")
+                    print(f"[DEBUG] {ticker} EPS from USD: {raw_eps:.4f} × {usd_vnd_rate} = {eps:.0f} VND" + (f", P/E = {pe_ratio:.2f}" if pe_ratio else ""))
                 else:
                     eps = None
-                    pe_ratio = tv_data['peRatio']
-                    print(f"[DEBUG] {ticker} No EPS from TradingView" + (f", P/E from TV: {pe_ratio:.2f}" if pe_ratio else ""))
+                    pe_ratio = None
+                    print(f"[DEBUG] {ticker} No EPS data available")
 
                 # Get dividend growth from fallback if available, else default
                 if ticker in DIVIDEND_FALLBACK_VN:
