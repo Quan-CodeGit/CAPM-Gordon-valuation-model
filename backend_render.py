@@ -82,6 +82,26 @@ DIVIDEND_GROWTH_DATABASE = {
     'MCD': 0.08, 'MSFT': 0.10, 'AAPL': 0.08, 'V': 0.17, 'MA': 0.16,
 }
 
+def get_usd_vnd_rate():
+    """Get USD/VND exchange rate from TradingView (cached)"""
+    global _cache
+    cache_key = f"USDVND_{int(time.time() / 3600)}"  # Cache for 1 hour
+    if cache_key in _cache:
+        return _cache[cache_key]
+
+    try:
+        from tradingview_scraper.symbols.overview import Overview
+        overview = Overview()
+        result = overview.get_symbol_overview(symbol='FX_IDC:USDVND')
+        if result and 'data' in result:
+            rate = result['data'].get('close', 25500)
+            _cache[cache_key] = rate
+            print(f"[FX] USD/VND rate: {rate}")
+            return rate
+    except:
+        pass
+    return 25500  # Fallback rate
+
 def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
     """Fetch stock data from TradingView"""
     try:
@@ -112,13 +132,10 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
 
         # Debug: Print all available fields for VN stocks
         if is_vn_stock:
-            eps_fields = [k for k in data.keys() if 'eps' in k.lower() or 'earning' in k.lower()]
-            pe_fields = [k for k in data.keys() if 'p/e' in k.lower() or 'pe' in k.lower() or 'price_earning' in k.lower()]
+            eps_fields = {k: data.get(k) for k in data.keys() if 'eps' in k.lower() or 'earning' in k.lower()}
+            pe_fields = {k: data.get(k) for k in data.keys() if 'p/e' in k.lower() or 'pe' in k.lower() or 'price_earning' in k.lower()}
             print(f"[DEBUG TV] {ticker} EPS-related fields: {eps_fields}")
             print(f"[DEBUG TV] {ticker} P/E-related fields: {pe_fields}")
-            print(f"[DEBUG TV] {ticker} earnings_per_share_diluted_ttm = {data.get('earnings_per_share_diluted_ttm')}")
-            print(f"[DEBUG TV] {ticker} earnings_per_share_basic_ttm = {data.get('earnings_per_share_basic_ttm')}")
-            print(f"[DEBUG TV] {ticker} price_earnings_ttm = {data.get('price_earnings_ttm')}")
 
         current_price = data.get('close', 0)
         beta = data.get('beta_1_year', 1.0)
@@ -127,12 +144,25 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         div_per_share_fy = data.get('dividends_per_share_fy', None)
         pe_ratio = data.get('price_earnings_ttm', None)
 
-        # Try multiple EPS fields
-        eps = data.get('earnings_per_share_diluted_ttm', None)
-        if not eps:
-            eps = data.get('earnings_per_share_basic_ttm', None)
-        if not eps:
-            eps = data.get('earnings_per_share_fq', None)
+        # Get EPS from TradingView
+        # IMPORTANT: For VN stocks, TradingView API returns EPS in USD (not VND)
+        # e.g., VCB EPS = 0.16 USD = ~4,210 VND. Must convert using exchange rate.
+        eps_diluted_ttm = data.get('earnings_per_share_diluted_ttm', None)
+        eps_basic_ttm = data.get('earnings_per_share_basic_ttm', None)
+        eps_fq = data.get('earnings_per_share_fq', None)
+
+        if is_vn_stock:
+            # For VN stocks, pick the best TTM EPS (in USD), prefer basic over diluted
+            # TradingView sometimes returns None for diluted on VN stocks
+            candidates = [v for v in [eps_diluted_ttm, eps_basic_ttm] if v and v > 0]
+            eps = max(candidates) if candidates else None
+            print(f"[DEBUG TV] {ticker} EPS (USD): diluted_ttm={eps_diluted_ttm}, basic_ttm={eps_basic_ttm} → chosen={eps}")
+        else:
+            eps = eps_diluted_ttm
+            if not eps:
+                eps = eps_basic_ttm
+            if not eps:
+                eps = eps_fq
 
         dividend_yield = dividend_yield_percent / 100 if dividend_yield_percent else 0
 
@@ -235,27 +265,23 @@ def get_valuation(ticker):
                 company_name = tv_data['companyName']
                 source = tv_data['source']
 
-                # TradingView returns VN dividends in thousands, need to multiply by 1000
+                # For VN stocks, dividend is calculated from yield × close price (both in VND)
+                # div_per_share_fy is always None for VN stocks, so yield-based calc is used
+                # No conversion needed since close is already in VND
                 dividend_rate = tv_data['dividend']
-                if dividend_rate and dividend_rate > 0 and dividend_rate < 100:
-                    # Likely in thousands, convert to actual VND
-                    dividend_rate = dividend_rate * 1000
 
-                # TradingView returns VN EPS in thousands, need to multiply by 1000
-                eps = tv_data['eps']
-                if eps and eps > 0:
-                    if eps < 1000:
-                        # Likely in thousands, convert to actual VND
-                        eps = eps * 1000
-                    print(f"[DEBUG] {ticker} EPS from TradingView: {eps}")
-
-                # Get P/E from TradingView or calculate it
-                pe_ratio = tv_data['peRatio']
-                if pe_ratio:
-                    print(f"[DEBUG] {ticker} P/E from TradingView: {pe_ratio}")
-                elif eps and eps > 0:
-                    pe_ratio = current_price / eps
-                    print(f"[DEBUG] {ticker} P/E calculated: {pe_ratio}")
+                # TradingView API returns VN stock EPS in USD, need to convert to VND
+                # e.g., VCB EPS = 0.16 USD × 25,500 = ~4,080 VND (actual: ~4,210 VND)
+                raw_eps = tv_data['eps']  # EPS in USD
+                if raw_eps and raw_eps > 0:
+                    usd_vnd_rate = get_usd_vnd_rate()
+                    eps = raw_eps * usd_vnd_rate
+                    pe_ratio = current_price / eps if eps > 0 else None
+                    print(f"[DEBUG] {ticker} EPS: {raw_eps} USD × {usd_vnd_rate} = {eps:.0f} VND, P/E = {pe_ratio:.2f}" if pe_ratio else f"[DEBUG] {ticker} EPS: {raw_eps} USD × {usd_vnd_rate} = {eps:.0f} VND")
+                else:
+                    eps = None
+                    pe_ratio = tv_data['peRatio']
+                    print(f"[DEBUG] {ticker} No EPS from TradingView" + (f", P/E from TV: {pe_ratio:.2f}" if pe_ratio else ""))
 
                 # Get dividend growth from fallback if available, else default
                 if ticker in DIVIDEND_FALLBACK_VN:

@@ -237,6 +237,26 @@ def get_vn_dividend_data(ticker):
     print(f"No fallback data for {ticker}, using default: 0 VND, 5% growth")
     return 0, 0.05
 
+def get_usd_vnd_rate():
+    """Get USD/VND exchange rate from TradingView (cached for 1 hour)"""
+    global _cache
+    cache_key = f"USDVND_{int(time.time() / 3600)}"
+    if cache_key in _cache:
+        return _cache[cache_key]
+
+    try:
+        from tradingview_scraper.symbols.overview import Overview
+        overview = Overview()
+        result = overview.get_symbol_overview(symbol='FX_IDC:USDVND')
+        if result and 'data' in result:
+            rate = result['data'].get('close', 25500)
+            _cache[cache_key] = rate
+            print(f"[FX] USD/VND rate: {rate}")
+            return rate
+    except:
+        pass
+    return 25500  # Fallback rate
+
 def get_dividend_growth_from_history(ticker, is_au_stock=False, max_retries=2):
     """
     Calculate historical dividend growth with automatic caching
@@ -439,7 +459,19 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
 
         # Try to get P/E and EPS from TradingView
         pe_ratio_tv = data.get('price_earnings_ttm', None)  # Trailing 12-month P/E
-        eps_tv = data.get('earnings_per_share_diluted_ttm', None)  # Trailing EPS
+
+        # Get EPS from TradingView
+        # IMPORTANT: For VN stocks, TradingView API returns EPS in USD (not VND)
+        # e.g., VCB EPS = 0.16 USD = ~4,210 VND
+        eps_diluted_ttm = data.get('earnings_per_share_diluted_ttm', None)
+        eps_basic_ttm = data.get('earnings_per_share_basic_ttm', None)
+        if is_vn_stock:
+            # For VN stocks, pick the best TTM EPS (in USD)
+            candidates = [v for v in [eps_diluted_ttm, eps_basic_ttm] if v and v > 0]
+            eps_tv = max(candidates) if candidates else None
+            print(f"  [DEBUG] EPS (USD): diluted_ttm={eps_diluted_ttm}, basic_ttm={eps_basic_ttm} → chosen={eps_tv}")
+        else:
+            eps_tv = eps_diluted_ttm if eps_diluted_ttm else eps_basic_ttm
 
         # Try to get dividend per share (annual) directly from TradingView
         # This is more accurate than calculating from yield
@@ -857,13 +889,12 @@ def get_valuation(ticker):
                     roe_str = f"{roe*100:.1f}%" if roe else "N/A"
                     print(f"P/E Analysis: EPS=${eps:.2f}, P/E={pe_ratio:.2f}, Payout={payout_str}, ROE={roe_str}")
             else:
-                # For Vietnamese stocks, use vnstock library
-                print(f"Fetching P/E data for Vietnamese stock {ticker} from vnstock...")
+                # For Vietnamese stocks, try vnstock first, then TradingView P/E as fallback
+                print(f"Fetching P/E data for Vietnamese stock {ticker}...")
+                vnstock_success = False
 
                 try:
-                    if not _vnstock_loaded:
-                        print(f"[WARN] vnstock library not loaded, skipping P/E data")
-                    else:
+                    if _vnstock_loaded:
                         # Get financial ratios from VCI
                         finance = Finance(source="VCI", symbol=ticker, period="year")
                         ratios = finance.ratio(symbol=ticker, period="year", flatten_columns=True, separator="_")
@@ -876,6 +907,7 @@ def get_valuation(ticker):
                                 eps = latest.get('Chỉ tiêu định giá_EPS (VND)', None)
                                 if eps:
                                     print(f"[OK] EPS from vnstock: {eps:,.0f} VND")
+                                    vnstock_success = True
                             except:
                                 pass
 
@@ -892,32 +924,42 @@ def get_valuation(ticker):
                                     print(f"[OK] ROE from vnstock: {roe*100:.1f}%")
                             except:
                                 pass
-
-                            # Calculate payout ratio and other metrics if we have the data
-                            if eps and eps > 0:
-                                # If we didn't get P/E from vnstock, calculate it
-                                if not pe_ratio:
-                                    pe_ratio = current_price / eps
-
-                                # Calculate payout ratio
-                                if dividend_rate > 0:
-                                    payout_ratio = dividend_rate / eps
-                                    retention_ratio = 1 - payout_ratio
-
-                                    # Calculate theoretical P/E
-                                    if capm_return is not None and dividend_growth is not None and capm_return > dividend_growth:
-                                        theoretical_pe = payout_ratio / (capm_return - dividend_growth)
-
-                                payout_str = f"{payout_ratio*100:.1f}%" if payout_ratio else "N/A"
-                                roe_str = f"{roe*100:.1f}%" if roe else "N/A"
-                                print(f"P/E Analysis: EPS={eps:,.0f} VND, P/E={pe_ratio:.2f}, Payout={payout_str}, ROE={roe_str}")
                         else:
                             print(f"[WARN] No financial data returned from vnstock for {ticker}")
+                    else:
+                        print(f"[WARN] vnstock library not loaded")
 
                 except Exception as e:
                     print(f"Error getting vnstock data for {ticker}: {e}")
-                    import traceback
-                    traceback.print_exc()
+
+                # Fallback: Use TradingView EPS if vnstock failed
+                # TradingView API returns VN stock EPS in USD, convert to VND
+                if not vnstock_success and tv_data:
+                    tv_raw_eps = tv_data.get('eps')  # EPS in USD
+                    if tv_raw_eps and tv_raw_eps > 0:
+                        usd_vnd_rate = get_usd_vnd_rate()
+                        eps = tv_raw_eps * usd_vnd_rate
+                        pe_ratio = current_price / eps if eps > 0 else None
+                        print(f"[FALLBACK] EPS from TradingView: {tv_raw_eps} USD × {usd_vnd_rate} = {eps:.0f} VND" + (f", P/E = {pe_ratio:.2f}" if pe_ratio else ""))
+
+                # Calculate payout ratio and other metrics if we have EPS
+                if eps and eps > 0:
+                    # If we didn't get P/E yet, calculate it
+                    if not pe_ratio:
+                        pe_ratio = current_price / eps
+
+                    # Calculate payout ratio
+                    if dividend_rate > 0:
+                        payout_ratio = dividend_rate / eps
+                        retention_ratio = 1 - payout_ratio
+
+                        # Calculate theoretical P/E
+                        if capm_return is not None and dividend_growth is not None and capm_return > dividend_growth:
+                            theoretical_pe = payout_ratio / (capm_return - dividend_growth)
+
+                    payout_str = f"{payout_ratio*100:.1f}%" if payout_ratio else "N/A"
+                    roe_str = f"{roe*100:.1f}%" if roe else "N/A"
+                    print(f"P/E Analysis: EPS={eps:,.0f} VND, P/E={pe_ratio:.2f}, Payout={payout_str}, ROE={roe_str}")
         except Exception as e:
             print(f"Error calculating P/E ratio: {e}")
             import traceback
