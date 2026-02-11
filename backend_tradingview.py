@@ -760,7 +760,7 @@ def get_valuation(ticker):
 
         try:
             if not is_vn_stock:
-                # Try multiple unlimited sources for P/E data
+                # Get P/E and EPS data for US/AU stocks
                 print(f"Fetching P/E data for {ticker}...")
                 eps = None
                 import requests
@@ -769,7 +769,17 @@ def get_valuation(ticker):
                 yf_ticker = ticker + ".AX" if is_au_stock else ticker
                 print(f"[DEBUG] Using ticker symbol: {yf_ticker} for P/E data")
 
-                # Method 1: Yahoo Finance API (prioritize over TradingView for accuracy)
+                # Method 1 (preferred): Derive EPS from TradingView P/E ratio
+                # P/E is currency-neutral, so Price / P/E gives EPS in local currency
+                # This avoids USD conversion issues for AU stocks
+                tv_pe = tv_data.get('peRatio') if tv_data else None
+                if tv_pe and tv_pe > 0 and current_price > 0:
+                    eps = current_price / tv_pe
+                    pe_ratio = tv_pe
+                    currency_sym = 'A$' if is_au_stock else '$'
+                    print(f"[OK] EPS from TradingView P/E: {current_price} / {tv_pe:.2f} = {currency_sym}{eps:.2f}")
+
+                # Method 2: Yahoo Finance API
                 if not eps:
                     try:
                         print(f"Trying Yahoo Finance API for {yf_ticker}...")
@@ -799,7 +809,7 @@ def get_valuation(ticker):
                     except Exception as e:
                         print(f"Yahoo Finance API failed: {e}")
 
-                # Method 2: Fallback to yfinance library
+                # Method 3: Fallback to yfinance library
                 if not eps and yf_stock:
                     try:
                         print(f"Trying yfinance library (yf_stock available)...")
@@ -814,7 +824,7 @@ def get_valuation(ticker):
                 elif not eps:
                     print(f"[WARN] Skipping yfinance fallback - yf_stock not available")
 
-                # Method 3: Last resort - Alpha Vantage (25/day limit, US stocks only)
+                # Method 4: Last resort - Alpha Vantage (25/day limit, US stocks only)
                 if not eps and not is_au_stock:  # Alpha Vantage doesn't support AU stocks well
                     try:
                         print(f"Trying Alpha Vantage (limited to 25/day)...")
@@ -829,17 +839,18 @@ def get_valuation(ticker):
                     except Exception as e:
                         print(f"Alpha Vantage failed: {e}")
 
-                # Method 4: Last resort - use TradingView data if nothing else worked
+                # Method 5: Last resort - use raw TradingView EPS
                 if not eps and tv_data and tv_data.get('eps'):
                     eps = tv_data.get('eps')
-                    print(f"[FALLBACK] Using EPS from TradingView: ${eps:.2f} (other sources failed)")
+                    print(f"[FALLBACK] Using raw EPS from TradingView: ${eps:.2f} (other sources failed)")
 
                 if not eps:
                     print(f"[WARN] Could not fetch EPS for {ticker} from any source")
 
                 if eps and eps > 0:
-                    # Calculate actual P/E
-                    pe_ratio = current_price / eps
+                    # Calculate P/E if not already set from TradingView
+                    if not pe_ratio:
+                        pe_ratio = current_price / eps
 
                     # Calculate payout ratio (Dividend / EPS)
                     if dividend_rate > 0:

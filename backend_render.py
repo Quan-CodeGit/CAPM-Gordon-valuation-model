@@ -327,9 +327,25 @@ def get_valuation(ticker):
             beta = tv_data['beta']
             company_name = tv_data['companyName']
             dividend_rate = tv_data['dividend']
-            eps = tv_data['eps']
-            pe_ratio = tv_data['peRatio']
             source = tv_data['source']
+
+            # Derive EPS in local currency from P/E (preferred) or use raw EPS (fallback)
+            # TradingView API returns EPS in USD even for AU stocks, but P/E is currency-neutral
+            # So Price / P/E gives correct EPS in local currency (AUD or USD)
+            tv_pe = tv_data['peRatio']
+            raw_eps = tv_data['eps']
+
+            if tv_pe and tv_pe > 0 and current_price > 0:
+                eps = current_price / tv_pe
+                pe_ratio = tv_pe
+                print(f"[DEBUG] {ticker} EPS from P/E: {current_price} / {tv_pe:.2f} = {eps:.2f}")
+            elif raw_eps and raw_eps > 0:
+                eps = raw_eps
+                pe_ratio = current_price / eps if eps > 0 else None
+                print(f"[DEBUG] {ticker} EPS from raw: {eps:.2f}" + (f", P/E = {pe_ratio:.2f}" if pe_ratio else ""))
+            else:
+                eps = None
+                pe_ratio = None
 
             dividend_growth = get_dividend_growth(ticker, is_au_stock)
             risk_free_rate = get_risk_free_rate()
