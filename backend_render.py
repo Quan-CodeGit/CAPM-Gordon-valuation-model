@@ -270,25 +270,23 @@ def get_valuation(ticker):
                 # No conversion needed since close is already in VND
                 dividend_rate = tv_data['dividend']
 
-                # Get EPS in VND from TradingView
-                # Method 1 (preferred): If TradingView provides P/E, derive EPS = Price / P/E
-                #   This gives exact VND values matching TradingView's website
-                # Method 2 (fallback): Convert EPS from USD to VND using exchange rate
-                #   TradingView API returns VN EPS in USD, so slight rounding difference
+                # Get EPS in VND and P/E from TradingView
+                # - P/E from TradingView is correct (currency-neutral) → use directly
+                # - EPS from TradingView is in USD → convert to VND
+                # Method 1: If P/E available, use P/E directly + derive EPS = Price / P/E
+                # Method 2: Convert raw EPS from USD to VND using exchange rate
                 tv_pe = tv_data['peRatio']
                 raw_eps = tv_data['eps']  # EPS in USD
 
                 if tv_pe and tv_pe > 0 and current_price > 0:
-                    # Best: derive EPS directly from P/E (exact match with TradingView website)
-                    eps = current_price / tv_pe
                     pe_ratio = tv_pe
-                    print(f"[DEBUG] {ticker} EPS from P/E: {current_price} / {tv_pe:.2f} = {eps:.0f} VND")
+                    eps = current_price / tv_pe
+                    print(f"[DEBUG] {ticker} P/E={tv_pe:.2f}, EPS={eps:.0f} VND (from Price/P/E)")
                 elif raw_eps and raw_eps > 0:
-                    # Fallback: convert EPS from USD to VND
                     usd_vnd_rate = get_usd_vnd_rate()
                     eps = raw_eps * usd_vnd_rate
                     pe_ratio = current_price / eps if eps > 0 else None
-                    print(f"[DEBUG] {ticker} EPS from USD: {raw_eps:.4f} × {usd_vnd_rate} = {eps:.0f} VND" + (f", P/E = {pe_ratio:.2f}" if pe_ratio else ""))
+                    print(f"[DEBUG] {ticker} EPS={eps:.0f} VND (from {raw_eps:.4f} USD × {usd_vnd_rate})" + (f", P/E={pe_ratio:.2f}" if pe_ratio else ""))
                 else:
                     eps = None
                     pe_ratio = None
@@ -329,23 +327,41 @@ def get_valuation(ticker):
             dividend_rate = tv_data['dividend']
             source = tv_data['source']
 
-            # Derive EPS in local currency from P/E (preferred) or use raw EPS (fallback)
-            # TradingView API returns EPS in USD even for AU stocks, but P/E is currency-neutral
-            # So Price / P/E gives correct EPS in local currency (AUD or USD)
+            # Get EPS and P/E from TradingView
+            # - P/E from TradingView is always correct (currency-neutral) → use directly
+            # - EPS from TradingView is in USD for ALL markets
+            #   - US stocks: USD is correct, use raw EPS directly
+            #   - AU stocks: need AUD, derive EPS = Price / P/E
             tv_pe = tv_data['peRatio']
-            raw_eps = tv_data['eps']
+            raw_eps = tv_data['eps']  # Always in USD
 
-            if tv_pe and tv_pe > 0 and current_price > 0:
-                eps = current_price / tv_pe
-                pe_ratio = tv_pe
-                print(f"[DEBUG] {ticker} EPS from P/E: {current_price} / {tv_pe:.2f} = {eps:.2f}")
-            elif raw_eps and raw_eps > 0:
-                eps = raw_eps
-                pe_ratio = current_price / eps if eps > 0 else None
-                print(f"[DEBUG] {ticker} EPS from raw: {eps:.2f}" + (f", P/E = {pe_ratio:.2f}" if pe_ratio else ""))
+            if is_au_stock:
+                # AU: raw EPS is in USD, need AUD → derive from P/E
+                if tv_pe and tv_pe > 0 and current_price > 0:
+                    eps = current_price / tv_pe
+                    pe_ratio = tv_pe
+                    print(f"[DEBUG] {ticker} EPS from P/E: {current_price} / {tv_pe:.2f} = A${eps:.2f}")
+                elif raw_eps and raw_eps > 0:
+                    eps = raw_eps  # USD fallback (not ideal but better than nothing)
+                    pe_ratio = current_price / eps if eps > 0 else None
+                    print(f"[DEBUG] {ticker} EPS fallback (USD): {eps:.2f}")
+                else:
+                    eps = None
+                    pe_ratio = None
             else:
-                eps = None
-                pe_ratio = None
+                # US: raw EPS is already in USD, use directly
+                # Use TradingView P/E directly (don't recalculate from live price)
+                if raw_eps and raw_eps > 0:
+                    eps = raw_eps
+                    pe_ratio = tv_pe if tv_pe else (current_price / eps if eps > 0 else None)
+                    print(f"[DEBUG] {ticker} EPS: ${eps:.2f}, P/E: {pe_ratio:.2f}" if pe_ratio else f"[DEBUG] {ticker} EPS: ${eps:.2f}")
+                elif tv_pe and tv_pe > 0 and current_price > 0:
+                    eps = current_price / tv_pe
+                    pe_ratio = tv_pe
+                    print(f"[DEBUG] {ticker} EPS from P/E: ${eps:.2f}")
+                else:
+                    eps = None
+                    pe_ratio = None
 
             dividend_growth = get_dividend_growth(ticker, is_au_stock)
             risk_free_rate = get_risk_free_rate()
