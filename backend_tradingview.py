@@ -257,6 +257,27 @@ def get_usd_vnd_rate():
         pass
     return 25500  # Fallback rate
 
+def get_ttm_dividend(ticker, is_au_stock=False):
+    """Get trailing 12-month dividend from yfinance (actual paid dividends)"""
+    try:
+        import yfinance as yf
+        from datetime import datetime, timedelta
+
+        yf_ticker = ticker + ".AX" if is_au_stock else ticker
+        stock = yf.Ticker(yf_ticker)
+        dividends = stock.dividends
+
+        if dividends is not None and len(dividends) > 0:
+            one_year_ago = datetime.now() - timedelta(days=395)  # ~13 months for safety
+            recent = dividends[dividends.index >= one_year_ago.strftime('%Y-%m-%d')]
+            if len(recent) > 0:
+                ttm_div = float(recent.sum())
+                print(f"[DIVIDEND] {ticker} TTM dividend from yfinance: {ttm_div:.4f} ({len(recent)} payments)")
+                return ttm_div
+    except Exception as e:
+        print(f"[DIVIDEND] yfinance failed for {ticker}: {e}")
+    return None
+
 def get_dividend_growth_from_history(ticker, is_au_stock=False, max_retries=2):
     """
     Calculate historical dividend growth with automatic caching
@@ -570,6 +591,16 @@ def get_valuation(ticker):
         company_name = tv_data['companyName']
         dividend_rate = tv_data['dividend']
         yf_stock = None  # Initialize yfinance stock object for US stocks
+
+        # For AU/US stocks, get actual TTM dividend from yfinance
+        # TradingView's dividend_yield is "indicated" (forward-looking), not TTM
+        if not is_vn_stock:
+            ttm_div = get_ttm_dividend(ticker, is_au_stock)
+            if ttm_div and ttm_div > 0:
+                dividend_rate = ttm_div
+                print(f"[DIVIDEND] {ticker} Using TTM dividend from yfinance: {dividend_rate:.4f}")
+            else:
+                print(f"[DIVIDEND] {ticker} Using TradingView dividend (yield × price): {dividend_rate:.4f}")
 
         # Initialize variables that will be set in market-specific sections
         historical_growth = None  # Will be set for AU/US stocks

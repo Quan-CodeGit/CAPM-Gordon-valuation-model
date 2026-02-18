@@ -185,6 +185,27 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         print(f"TradingView error for {ticker}: {e}")
         return None
 
+def get_ttm_dividend(ticker, is_au_stock=False):
+    """Get trailing 12-month dividend from yfinance (actual paid dividends)"""
+    try:
+        import yfinance as yf
+        from datetime import datetime, timedelta
+
+        yf_ticker = ticker + ".AX" if is_au_stock else ticker
+        stock = yf.Ticker(yf_ticker)
+        dividends = stock.dividends
+
+        if dividends is not None and len(dividends) > 0:
+            one_year_ago = datetime.now() - timedelta(days=395)  # ~13 months for safety
+            recent = dividends[dividends.index >= one_year_ago.strftime('%Y-%m-%d')]
+            if len(recent) > 0:
+                ttm_div = float(recent.sum())
+                print(f"[DIVIDEND] {ticker} TTM dividend from yfinance: {ttm_div:.4f} ({len(recent)} payments)")
+                return ttm_div
+    except Exception as e:
+        print(f"[DIVIDEND] yfinance failed for {ticker}: {e}")
+    return None
+
 def get_dividend_growth(ticker, is_au_stock=False):
     """Get dividend growth rate"""
     cache = load_dividend_growth_cache()
@@ -324,8 +345,17 @@ def get_valuation(ticker):
             current_price = tv_data['currentPrice']
             beta = tv_data['beta']
             company_name = tv_data['companyName']
-            dividend_rate = tv_data['dividend']
             source = tv_data['source']
+
+            # Get actual TTM dividend from yfinance (more accurate than yield × price)
+            # TradingView's dividend_yield is "indicated" (forward-looking), not TTM
+            ttm_div = get_ttm_dividend(ticker, is_au_stock)
+            if ttm_div and ttm_div > 0:
+                dividend_rate = ttm_div
+                print(f"[DEBUG] {ticker} Using TTM dividend from yfinance: {dividend_rate:.4f}")
+            else:
+                dividend_rate = tv_data['dividend']
+                print(f"[DEBUG] {ticker} Using TradingView dividend (yield × price): {dividend_rate:.4f}")
 
             # Get EPS and P/E from TradingView
             # - P/E from TradingView is always correct (currency-neutral) → use directly
