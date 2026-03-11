@@ -40,7 +40,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState } = React;
 
         // Lucide React icons as simple SVG components
         const TrendingUp = ({ className }) => (
@@ -70,57 +70,13 @@
             const [result, setResult] = useState(null);
             const [error, setError] = useState('');
 
-            // Industry growth state
-            const [industries, setIndustries] = useState([]);
-            const [selectedIndustry, setSelectedIndustry] = useState('');
-            const [industrySearch, setIndustrySearch] = useState('');
-            const [showDropdown, setShowDropdown] = useState(false);
-            const [calculatedGrowth, setCalculatedGrowth] = useState(null);
-            const [growthNote, setGrowthNote] = useState(null);
-            const [growthCapped, setGrowthCapped] = useState(false);
+            // Manual growth override (industry auto-detected by backend from TradingView)
             const [overrideEnabled, setOverrideEnabled] = useState(false);
             const [manualGrowth, setManualGrowth] = useState('');
-            const [loadingGrowth, setLoadingGrowth] = useState(false);
-            const dropdownRef = useRef(null);
 
             const API_URL = window.location.hostname === 'localhost'
                 ? 'http://localhost:5000'
                 : (window.CONFIG?.BACKEND_URL || window.location.origin);
-
-            // Fetch industries on mount
-            useEffect(() => {
-                fetch(`${API_URL}/api/industries`)
-                    .then(r => r.json())
-                    .then(data => setIndustries(data.industries || []))
-                    .catch(() => {});
-            }, []);
-
-            // Fetch calculated growth when industry or market changes
-            useEffect(() => {
-                if (!selectedIndustry || overrideEnabled) return;
-                setLoadingGrowth(true);
-                const currency = market === 'VN' ? 'VND' : market === 'AU' ? 'AUD' : 'USD';
-                fetch(`${API_URL}/api/growth-rate?industry=${encodeURIComponent(selectedIndustry)}&currency=${currency}`)
-                    .then(r => r.json())
-                    .then(data => {
-                        setCalculatedGrowth(data.g);
-                        setGrowthNote(data.note);
-                        setGrowthCapped(data.capped || false);
-                    })
-                    .catch(() => setCalculatedGrowth(null))
-                    .finally(() => setLoadingGrowth(false));
-            }, [selectedIndustry, market, overrideEnabled]);
-
-            // Close dropdown on outside click
-            useEffect(() => {
-                const handleClick = (e) => {
-                    if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-                        setShowDropdown(false);
-                    }
-                };
-                document.addEventListener('mousedown', handleClick);
-                return () => document.removeEventListener('mousedown', handleClick);
-            }, []);
 
             // Currency formatting function
             const formatCurrency = (amount, currency) => {
@@ -155,8 +111,6 @@
                     if (overrideEnabled && manualGrowth) {
                         const g = parseFloat(manualGrowth) / 100;
                         if (!isNaN(g) && g >= 0 && g <= 0.20) params.append('growth_override', g.toFixed(4));
-                    } else if (selectedIndustry) {
-                        params.append('industry', selectedIndustry);
                     }
                     const response = await fetch(`${API_URL}/api/valuation/${ticker.toUpperCase()}?${params}`);
 
@@ -337,86 +291,26 @@
                                     </div>
                                 </div>
 
-                                {/* Industry Selector (Damodaran growth methodology) */}
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Industry <span className="text-xs text-gray-400 font-normal">— for Damodaran-adjusted growth rate (optional)</span>
-                                    </label>
-                                    <div className="relative" ref={dropdownRef}>
+                                {/* Manual growth override (industry auto-detected from TradingView) */}
+                                {overrideEnabled && (
+                                    <div className="mb-4 flex items-center gap-3 bg-amber-50 border-2 border-amber-300 rounded-lg px-3 py-2">
+                                        <span className="text-sm text-amber-700 font-medium whitespace-nowrap">Override g =</span>
                                         <input
-                                            type="text"
-                                            value={industrySearch}
-                                            onFocus={() => setShowDropdown(true)}
-                                            onChange={(e) => { setIndustrySearch(e.target.value); setShowDropdown(true); }}
-                                            placeholder="Search industry… (leave blank to use historical growth)"
-                                            className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-sm"
+                                            type="number"
+                                            value={manualGrowth}
+                                            onChange={(e) => setManualGrowth(e.target.value)}
+                                            placeholder="e.g. 3.5"
+                                            min="0" max="20" step="0.1"
+                                            className="w-24 px-2 py-1 border border-amber-400 rounded text-amber-800 bg-white text-sm font-semibold"
                                             disabled={loading}
                                         />
-                                        {selectedIndustry && (
-                                            <button
-                                                onClick={() => { setSelectedIndustry(''); setIndustrySearch(''); setCalculatedGrowth(null); setOverrideEnabled(false); setManualGrowth(''); }}
-                                                className="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600 text-xl leading-none px-1"
-                                            >×</button>
-                                        )}
-                                        {showDropdown && industries.length > 0 && (
-                                            <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                                {industries
-                                                    .filter(ind => ind.name.toLowerCase().includes(industrySearch.toLowerCase()))
-                                                    .map(ind => (
-                                                        <button
-                                                            key={ind.name}
-                                                            onClick={() => { setSelectedIndustry(ind.name); setIndustrySearch(ind.name); setShowDropdown(false); setOverrideEnabled(false); }}
-                                                            className={`w-full text-left px-3 py-2 text-sm hover:bg-purple-50 flex justify-between items-center ${selectedIndustry === ind.name ? 'bg-purple-100' : ''}`}
-                                                        >
-                                                            <span>{ind.name}</span>
-                                                            {ind.eps_growth !== null && ind.eps_growth !== undefined && (
-                                                                <span className="text-xs text-gray-400 ml-2 flex-shrink-0">EPS {Number(ind.eps_growth).toFixed(1)}%</span>
-                                                            )}
-                                                        </button>
-                                                    ))
-                                                }
-                                            </div>
-                                        )}
+                                        <span className="text-amber-700 text-sm">%</span>
+                                        <button
+                                            onClick={() => { setOverrideEnabled(false); setManualGrowth(''); }}
+                                            className="ml-auto text-xs px-2 py-1 rounded border border-amber-400 text-amber-700 hover:bg-amber-100"
+                                        >Cancel</button>
                                     </div>
-                                    {selectedIndustry && (
-                                        <div className="mt-2 flex items-center gap-3">
-                                            <div className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold ${overrideEnabled ? 'bg-amber-50 border-2 border-amber-300' : 'bg-purple-50 border-2 border-purple-200'}`}>
-                                                {overrideEnabled ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-amber-700">Manual g =</span>
-                                                        <input
-                                                            type="number"
-                                                            value={manualGrowth}
-                                                            onChange={(e) => setManualGrowth(e.target.value)}
-                                                            placeholder="e.g. 3.5"
-                                                            min="0" max="20" step="0.1"
-                                                            className="w-20 px-2 py-0.5 border border-amber-400 rounded text-amber-800 bg-white text-sm"
-                                                        />
-                                                        <span className="text-amber-700">%</span>
-                                                    </div>
-                                                ) : loadingGrowth ? (
-                                                    <span className="text-purple-500">Calculating…</span>
-                                                ) : calculatedGrowth !== null ? (
-                                                    <span className="text-purple-700">
-                                                        g = {(calculatedGrowth * 100).toFixed(2)}%
-                                                        {growthCapped && <span className="text-xs ml-1 text-orange-600">(capped at 5%)</span>}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-gray-400">—</span>
-                                                )}
-                                            </div>
-                                            <button
-                                                onClick={() => setOverrideEnabled(!overrideEnabled)}
-                                                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap ${overrideEnabled ? 'bg-amber-100 border-amber-400 text-amber-700' : 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'}`}
-                                            >
-                                                {overrideEnabled ? 'Using manual' : 'Override g'}
-                                            </button>
-                                        </div>
-                                    )}
-                                    {growthNote && selectedIndustry && !overrideEnabled && (
-                                        <p className="text-xs text-gray-500 mt-1 italic">{growthNote}</p>
-                                    )}
-                                </div>
+                                )}
 
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                     Stock Ticker Symbol
@@ -552,48 +446,65 @@
                                     </div>
 
                                     {/* Growth Rate (g) Breakdown */}
-                                    {result.growthDetails ? (
-                                        <div className="bg-purple-50 rounded-lg p-5 border border-purple-200">
-                                            <h3 className="font-semibold text-gray-800 mb-3">Growth Rate (g) Breakdown</h3>
-                                            {result.growthDetails.method === 'industry' ? (
-                                                <div className="space-y-2 text-sm">
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Industry:</span>
-                                                        <span className="font-semibold text-gray-800">{result.growthDetails.industryName}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Industry EPS Growth (5yr):</span>
-                                                        <span className="font-bold">{result.growthDetails.industryEpsGrowth != null ? Number(result.growthDetails.industryEpsGrowth).toFixed(2) + '%' : 'N/A'}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Benchmark (Total Market):</span>
-                                                        <span className="font-bold">{result.growthDetails.benchmarkEpsGrowth != null ? Number(result.growthDetails.benchmarkEpsGrowth).toFixed(2) + '%' : 'N/A'}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Weight (industry ÷ benchmark):</span>
-                                                        <span className="font-bold">{result.growthDetails.weight != null ? Number(result.growthDetails.weight).toFixed(4) : 'N/A'}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">GDP Base ({result.currency}):</span>
-                                                        <span className="font-bold">{result.growthDetails.gdpBase != null ? (Number(result.growthDetails.gdpBase) * 100).toFixed(1) + '%' : 'N/A'}</span>
-                                                    </div>
-                                                    <div className="border-t border-purple-200 pt-2 flex justify-between">
-                                                        <span className="text-gray-700 font-semibold">g = GDP × Weight{result.growthDetails.capped ? ' (capped at 5%)' : ''}:</span>
-                                                        <span className="font-bold text-purple-700">{(result.dividendGrowth * 100).toFixed(2)}%</span>
-                                                    </div>
-                                                    {result.growthDetails.note && (
-                                                        <p className="text-xs text-gray-500 italic">{result.growthDetails.note}</p>
-                                                    )}
-                                                    <p className="text-xs text-gray-400">Source: Damodaran NYU Stern {result.growthDetails.damodaranYear || 2026}</p>
-                                                </div>
-                                            ) : result.growthDetails.method === 'override' ? (
-                                                <div className="text-sm">
-                                                    <p className="text-amber-700 font-semibold">Manual override: g = {(result.dividendGrowth * 100).toFixed(2)}%</p>
-                                                    <p className="text-xs text-gray-500 mt-1">User-specified growth rate, bypassing historical and industry calculations.</p>
-                                                </div>
-                                            ) : null}
+                                    <div className={`rounded-lg p-5 border ${result.growthDetails ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'}`}>
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h3 className="font-semibold text-gray-800">Growth Rate (g) Breakdown</h3>
+                                            {!overrideEnabled && (
+                                                <button
+                                                    onClick={() => setOverrideEnabled(true)}
+                                                    className="text-xs px-3 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-100 transition-colors"
+                                                >Override g</button>
+                                            )}
                                         </div>
-                                    ) : null}
+                                        {result.growthDetails && result.growthDetails.method === 'industry' ? (
+                                            <div className="space-y-2 text-sm">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-gray-600">Industry (auto-detected):</span>
+                                                    <span className="font-semibold text-gray-800 text-right ml-2">{result.growthDetails.industryName}</span>
+                                                </div>
+                                                {(result.tvSector || result.tvIndustry) && (
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-500 text-xs">TradingView classification:</span>
+                                                        <span className="text-xs text-gray-500">{[result.tvIndustry, result.tvSector].filter(Boolean).join(' · ')}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Industry EPS Growth (5yr):</span>
+                                                    <span className="font-bold">{result.growthDetails.industryEpsGrowth != null ? Number(result.growthDetails.industryEpsGrowth).toFixed(2) + '%' : 'N/A'}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Benchmark (Total Market):</span>
+                                                    <span className="font-bold">{result.growthDetails.benchmarkEpsGrowth != null ? Number(result.growthDetails.benchmarkEpsGrowth).toFixed(2) + '%' : 'N/A'}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Weight (industry ÷ benchmark):</span>
+                                                    <span className="font-bold">{result.growthDetails.weight != null ? Number(result.growthDetails.weight).toFixed(4) : 'N/A'}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">GDP Base ({result.currency}):</span>
+                                                    <span className="font-bold">{result.growthDetails.gdpBase != null ? (Number(result.growthDetails.gdpBase) * 100).toFixed(1) + '%' : 'N/A'}</span>
+                                                </div>
+                                                <div className="border-t border-purple-200 pt-2 flex justify-between">
+                                                    <span className="text-gray-700 font-semibold">g = GDP × Weight{result.growthDetails.capped ? ' (capped at 5%)' : ''}:</span>
+                                                    <span className="font-bold text-purple-700">{(result.dividendGrowth * 100).toFixed(2)}%</span>
+                                                </div>
+                                                {result.growthDetails.note && (
+                                                    <p className="text-xs text-gray-500 italic">{result.growthDetails.note}</p>
+                                                )}
+                                                <p className="text-xs text-gray-400">Source: Damodaran NYU Stern {result.growthDetails.damodaranYear || 2026}</p>
+                                            </div>
+                                        ) : result.growthDetails && result.growthDetails.method === 'override' ? (
+                                            <div className="text-sm">
+                                                <p className="text-amber-700 font-semibold">Manual override: g = {(result.dividendGrowth * 100).toFixed(2)}%</p>
+                                                <p className="text-xs text-gray-500 mt-1">User-specified growth rate, bypassing Damodaran industry calculation.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="text-sm">
+                                                <p className="text-gray-500 italic">Industry sector not recognized from TradingView data — using historical dividend CAGR.</p>
+                                                <p className="font-semibold text-gray-800 mt-1">g = {(result.dividendGrowth * 100).toFixed(2)}%</p>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     {/* Irregular Dividend Warning */}
                                     {result.irregularDividend && result.dividendConsistencyIssues && result.dividendConsistencyIssues.length > 0 && (

@@ -109,6 +109,232 @@ def get_usd_vnd_rate():
         pass
     return 25500  # Fallback rate
 
+def map_tv_to_damodaran(sector, industry):
+    """Map TradingView sector/industry strings to the nearest Damodaran industry name.
+    Uses case-insensitive substring matching; most-specific checks come first.
+    Returns None if no match found (caller falls back to historical growth).
+    """
+    s = f"{industry or ''} {sector or ''}".lower().strip()
+    if not s:
+        return None
+
+    # ---- Banking & Finance ----
+    if any(x in s for x in ['money center', 'bulge bracket']):
+        return 'Bank (Money Center)'
+    if any(x in s for x in ['major bank', 'regional bank', 'diversified bank', 'commercial bank', 'retail bank']):
+        return 'Banks (Regional)'
+    if 'bank' in s and 'investment bank' not in s:
+        return 'Banks (Regional)'
+    if any(x in s for x in ['investment bank', 'brokerage', 'capital market']):
+        return 'Brokerage & Investment Banking'
+    if any(x in s for x in ['life insurance', 'life & health insurance']):
+        return 'Insurance (Life)'
+    if any(x in s for x in ['property insurance', 'casualty insurance', 'p&c insurance', 'prop/cas']):
+        return 'Insurance (Prop/Cas.)'
+    if 'insurance' in s:
+        return 'Insurance (General)'
+    if any(x in s for x in ['investment manager', 'asset management', 'fund management', 'wealth management']):
+        return 'Investments & Asset Management'
+    if any(x in s for x in ['financial service', 'diversified financial', 'consumer finance', 'credit service', 'payment']):
+        return 'Financial Svcs. (Non-bank & Insurance)'
+
+    # ---- Technology ----
+    if any(x in s for x in ['semiconductor equipment', 'semiconductor equip']):
+        return 'Semiconductor Equip'
+    if 'semiconductor' in s:
+        return 'Semiconductor'
+    if any(x in s for x in ['internet software', 'software internet', 'saas', 'cloud software']):
+        return 'Software (Internet)'
+    if any(x in s for x in ['entertainment software', 'video game', 'gaming software']):
+        return 'Software (Entertainment)'
+    if 'software' in s:
+        return 'Software (System & Application)'
+    if any(x in s for x in ['computer hardware', 'technology hardware', 'computer & peripheral', 'computers/peripheral']):
+        return 'Computers/Peripherals'
+    if any(x in s for x in ['it service', 'computer service', 'information technology service']):
+        return 'Computer Services'
+    if any(x in s for x in ['electronic equipment', 'electronic component']):
+        return 'Electronics (General)'
+    if any(x in s for x in ['consumer electronic', 'office electronic']):
+        return 'Electronics (Consumer & Office)'
+    if any(x in s for x in ['telecom equipment', 'communication equipment']):
+        return 'Telecom. Equipment'
+    if any(x in s for x in ['wireless telecom', 'telecom wireless', 'mobile telecom']):
+        return 'Telecom (Wireless)'
+    if any(x in s for x in ['telecom', 'telecommunication', 'integrated telecom']):
+        return 'Telecom. Services'
+
+    # ---- Healthcare ----
+    if any(x in s for x in ['drug biotech', 'drugs biotech', 'biotechnology', 'biotech']):
+        return 'Drugs (Biotechnology)'
+    if any(x in s for x in ['drug pharma', 'drugs pharma', 'pharmaceutical', 'pharma']):
+        return 'Drugs (Pharmaceutical)'
+    if any(x in s for x in ['medical device', 'medical equipment']):
+        return 'Healthcare Products'
+    if any(x in s for x in ['health information', 'healthcare information', 'health technology']):
+        return 'Healthcare Information and Technology'
+    if any(x in s for x in ['hospital', 'health care facilit', 'healthcare facilit']):
+        return 'Hospitals/Healthcare Facilities'
+    if any(x in s for x in ['health care service', 'healthcare service', 'managed care', 'managed health']):
+        return 'Healthcare Support Services'
+    if any(x in s for x in ['health care product', 'healthcare product', 'health product', 'medical supply']):
+        return 'Healthcare Products'
+
+    # ---- Energy ----
+    if any(x in s for x in ['coal']):
+        return 'Coal & Related Energy'
+    if any(x in s for x in ['oilfield service', 'oil service', 'oil equipment', 'drilling']):
+        return 'Oilfield Svcs/Equip.'
+    if any(x in s for x in ['oil gas distribution', 'pipeline', 'midstream']):
+        return 'Oil/Gas Distribution'
+    if any(x in s for x in ['exploration', 'production', 'upstream', 'e&p', 'independent oil']):
+        return 'Oil/Gas (Production and Exploration)'
+    if any(x in s for x in ['oil', 'gas', 'petroleum', 'integrated energy']):
+        return 'Oil/Gas (Integrated)'
+    if any(x in s for x in ['renewable energy', 'solar', 'wind energy', 'green energy']):
+        return 'Green & Renewable Energy'
+    if any(x in s for x in ['power', 'electric utility', 'electric power']):
+        return 'Power'
+    if any(x in s for x in ['water utility', 'water util']):
+        return 'Utility (Water)'
+    if any(x in s for x in ['utility', 'utilities', 'gas utility', 'multi-util']):
+        return 'Utility (General)'
+
+    # ---- Materials ----
+    if any(x in s for x in ['gold', 'precious metal', 'silver', 'platinum']):
+        return 'Precious Metals'
+    if 'steel' in s:
+        return 'Steel'
+    if any(x in s for x in ['metal', 'mining', 'iron ore', 'alumin', 'copper', 'zinc', 'nickel']):
+        return 'Metals & Mining'
+    if any(x in s for x in ['specialty chemical', 'speciality chemical']):
+        return 'Chemical (Specialty)'
+    if any(x in s for x in ['diversified chemical']):
+        return 'Chemical (Diversified)'
+    if 'chemical' in s:
+        return 'Chemical (Basic)'
+    if any(x in s for x in ['paper', 'forest product', 'lumber', 'pulp']):
+        return 'Paper/Forest Products'
+    if any(x in s for x in ['packaging', 'container']):
+        return 'Packaging & Container'
+    if any(x in s for x in ['construction material', 'building material', 'building product', 'construction supply']):
+        return 'Building Materials'
+
+    # ---- Real Estate ----
+    if any(x in s for x in ['retail reit', 'office reit', 'industrial reit', 'residential reit', 'diversified reit', 'r.e.i.t', 'real estate investment trust']):
+        return 'R.E.I.T.'
+    if any(x in s for x in ['real estate develop', 'homebuil', 'home build']):
+        return 'Real Estate (Development)'
+    if any(x in s for x in ['real estate operation', 'real estate service']):
+        return 'Real Estate (Operations & Services)'
+    if any(x in s for x in ['real estate']):
+        return 'Real Estate (General/Diversified)'
+
+    # ---- Consumer ----
+    if any(x in s for x in ['alcoholic beverage', 'beer', 'wine', 'spirits', 'distill']):
+        return 'Beverage (Alcoholic)'
+    if any(x in s for x in ['soft drink', 'nonalcoholic', 'non-alcoholic beverage', 'beverage']):
+        return 'Beverage (Soft)'
+    if 'tobacco' in s:
+        return 'Tobacco'
+    if any(x in s for x in ['food process', 'food product', 'packaged food', 'food manufactur']):
+        return 'Food Processing'
+    if any(x in s for x in ['food wholesale', 'grocery wholesale', 'food distribut']):
+        return 'Food Wholesalers'
+    if any(x in s for x in ['restaurant', 'dining', 'fast food', 'food service']):
+        return 'Restaurant/Dining'
+    if any(x in s for x in ['household product', 'personal care', 'personal product', 'home product']):
+        return 'Household Products'
+    if any(x in s for x in ['apparel', 'textile', 'luxury good', 'fashion', 'clothing', 'footwear']):
+        return 'Apparel'
+    if any(x in s for x in ['home furnish', 'furniture', 'home decor']):
+        return 'Furn/Home Furnishings'
+    if any(x in s for x in ['auto part', 'automobile part']):
+        return 'Auto Parts'
+    if any(x in s for x in ['automobile', 'auto manufacturer', 'car manufacturer', 'vehicle']):
+        return 'Auto & Truck'
+    if any(x in s for x in ['retail auto', 'car dealer']):
+        return 'Retail (Automotive)'
+    if any(x in s for x in ['home improvement', 'building supply retail', 'home center']):
+        return 'Retail (Building Supply)'
+    if any(x in s for x in ['grocery', 'food retail', 'supermarket', 'food store']):
+        return 'Retail (Grocery and Food)'
+    if any(x in s for x in ['specialty retail', 'special line']):
+        return 'Retail (Special Lines)'
+    if any(x in s for x in ['broadline retail', 'general retail', 'department store', 'mass merchant']):
+        return 'Retail (General)'
+    if any(x in s for x in ['internet retail', 'online retail', 'e-commerce', 'ecommerce']):
+        return 'Retail (General)'
+    if 'retail' in s:
+        return 'Retail (General)'
+    if any(x in s for x in ['hotel', 'gaming', 'casino', 'resort', 'lodging', 'hospitality']):
+        return 'Hotel/Gaming'
+    if any(x in s for x in ['recreation', 'leisure', 'sport']):
+        return 'Recreation'
+
+    # ---- Media & Entertainment ----
+    if any(x in s for x in ['publishing', 'newspaper', 'magazine']):
+        return 'Publishing & Newspapers'
+    if any(x in s for x in ['broadcast', 'radio', 'television']):
+        return 'Broadcasting'
+    if any(x in s for x in ['cable']):
+        return 'Cable TV'
+    if any(x in s for x in ['media', 'entertainment', 'movie', 'film', 'streaming']):
+        return 'Entertainment'
+    if any(x in s for x in ['advertising', 'marketing service']):
+        return 'Advertising'
+
+    # ---- Industrials ----
+    if any(x in s for x in ['aerospace', 'defense', 'defence']):
+        return 'Aerospace/Defense'
+    if any(x in s for x in ['airline', 'air transport']):
+        return 'Air Transport'
+    if any(x in s for x in ['railroad', 'rail transport']):
+        return 'Transportation (Railroads)'
+    if 'trucking' in s:
+        return 'Trucking'
+    if any(x in s for x in ['transport', 'shipping', 'logistic', 'freight']):
+        return 'Transportation'
+    if any(x in s for x in ['engineering', 'construction']):
+        return 'Engineering/Construction'
+    if any(x in s for x in ['electrical equipment', 'electric equipment']):
+        return 'Electrical Equipment'
+    if any(x in s for x in ['machinery', 'machine tool', 'industrial machine']):
+        return 'Machinery'
+    if any(x in s for x in ['office equipment', 'office service']):
+        return 'Office Equipment & Services'
+    if any(x in s for x in ['environment', 'waste', 'water treatment']):
+        return 'Environmental & Waste Services'
+    if any(x in s for x in ['farm', 'agricult', 'crop']):
+        return 'Farming/Agriculture'
+    if any(x in s for x in ['business service', 'consumer service']):
+        return 'Business & Consumer Services'
+    if any(x in s for x in ['information service', 'data service']):
+        return 'Information Services'
+    if any(x in s for x in ['education', 'school', 'university', 'training']):
+        return 'Education'
+
+    # ---- Broad sector fallbacks ----
+    if any(x in s for x in ['finance', 'financial']):
+        return 'Financial Svcs. (Non-bank & Insurance)'
+    if any(x in s for x in ['technology', 'tech']):
+        return 'Software (System & Application)'
+    if any(x in s for x in ['health', 'medical']):
+        return 'Healthcare Products'
+    if any(x in s for x in ['consumer discretionary', 'consumer cyclical']):
+        return 'Retail (General)'
+    if any(x in s for x in ['consumer staple', 'consumer defensive']):
+        return 'Food Processing'
+    if any(x in s for x in ['industrial']):
+        return 'Machinery'
+    if any(x in s for x in ['material', 'basic material']):
+        return 'Metals & Mining'
+    if any(x in s for x in ['communicat', 'comm. service']):
+        return 'Telecom. Services'
+
+    return None
+
+
 def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
     """Fetch stock data from TradingView"""
     try:
@@ -143,6 +369,15 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
             pe_fields = {k: data.get(k) for k in data.keys() if 'p/e' in k.lower() or 'pe' in k.lower() or 'price_earning' in k.lower()}
             print(f"[DEBUG TV] {ticker} EPS-related fields: {eps_fields}")
             print(f"[DEBUG TV] {ticker} P/E-related fields: {pe_fields}")
+
+        # Extract sector/industry classification from TradingView
+        tv_sector = data.get('sector', None) or data.get('type_specific', None)
+        tv_industry = (
+            data.get('industry', None)
+            or data.get('industry_group', None)
+            or data.get('subtype', None)
+        )
+        print(f"[DEBUG TV] {ticker} sector={tv_sector!r}, industry={tv_industry!r}")
 
         current_price = data.get('close', 0)
         beta = data.get('beta_1_year', 1.0)
@@ -186,7 +421,9 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
             'dividendYield': dividend_yield,
             'peRatio': pe_ratio,
             'eps': eps,
-            'source': f'TradingView ({exchange}:{ticker})'
+            'source': f'TradingView ({exchange}:{ticker})',
+            'tvSector': tv_sector,
+            'tvIndustry': tv_industry,
         }
     except Exception as e:
         print(f"TradingView error for {ticker}: {e}")
@@ -340,6 +577,7 @@ def get_valuation(ticker):
 
         is_vn_stock = market == 'VN'
         is_au_stock = market == 'AU'
+        tv_data = None  # initialise; set in each branch below
 
         # Vietnamese stocks - try TradingView first, fallback if fails
         if is_vn_stock:
@@ -470,7 +708,10 @@ def get_valuation(ticker):
                 currency = 'USD'
 
         # Industry-adjusted growth rate (Damodaran methodology)
+        # Priority: 1) manual growth_override, 2) ?industry= param, 3) auto from TradingView sector
         industry_growth_info = None
+        auto_detected_industry = None
+
         if growth_override_param:
             try:
                 override_val = float(growth_override_param)
@@ -483,12 +724,27 @@ def get_valuation(ticker):
                     }
             except ValueError:
                 pass
-        elif industry:
-            ig = calculate_industry_growth(industry, currency)
-            ig['method'] = 'industry'
-            ig['industryName'] = industry
-            dividend_growth = ig['g']
-            industry_growth_info = ig
+        else:
+            # Determine which industry to use (manual param or auto-detected from TV)
+            effective_industry = industry
+            if not effective_industry:
+                # Auto-detect from TradingView sector/industry fields
+                tv_sector = tv_data.get('tvSector') if tv_data else None
+                tv_industry = tv_data.get('tvIndustry') if tv_data else None
+                effective_industry = map_tv_to_damodaran(tv_sector, tv_industry)
+                auto_detected_industry = effective_industry
+                if effective_industry:
+                    print(f"[AUTO] {ticker}: TV sector={tv_sector!r}, industry={tv_industry!r} → Damodaran={effective_industry!r}")
+                else:
+                    print(f"[AUTO] {ticker}: No sector match, using historical growth")
+
+            if effective_industry:
+                ig = calculate_industry_growth(effective_industry, currency)
+                ig['method'] = 'industry'
+                ig['industryName'] = effective_industry
+                ig['autoDetected'] = (effective_industry == auto_detected_industry)
+                dividend_growth = ig['g']
+                industry_growth_info = ig
 
         # Calculate CAPM
         capm_return = risk_free_rate + beta * (market_return - risk_free_rate)
@@ -580,7 +836,10 @@ def get_valuation(ticker):
                 'damodaranYear': 2026,
                 'source': industry_growth_info.get('source', 'Historical dividends') if industry_growth_info else 'Historical dividends',
             } if industry_growth_info else None,
-            'industryName': industry if industry else None,
+            'industryName': industry_growth_info.get('industryName') if industry_growth_info else None,
+            'autoDetectedIndustry': auto_detected_industry,
+            'tvSector': tv_data.get('tvSector') if tv_data else None,
+            'tvIndustry': tv_data.get('tvIndustry') if tv_data else None,
             'growthSource': industry_growth_info.get('source', 'Historical dividends') if industry_growth_info else 'Historical dividends',
             'sources': {
                 'beta': source,
