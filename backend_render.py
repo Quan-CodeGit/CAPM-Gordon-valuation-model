@@ -9,9 +9,16 @@ import time
 import json
 from datetime import datetime
 import pandas as pd
+from damodaran_db import (
+    init_db, get_industries, get_benchmark, get_config,
+    calculate_industry_growth, update_damodaran_data, get_damodaran_status
+)
+
+ADMIN_KEY = os.environ.get('ADMIN_KEY', 'dev-key-change-in-production')
 
 app = Flask(__name__)
 CORS(app)
+init_db()
 
 # Cache results
 _cache = {}
@@ -258,6 +265,63 @@ def get_risk_free_rate():
         pass
     return 0.042
 
+def _require_admin_key():
+    key = request.headers.get('X-Admin-Key', '')
+    if key != ADMIN_KEY:
+        return jsonify({'error': 'Unauthorized'}), 401
+    return None
+
+
+@app.route('/api/industries', methods=['GET'])
+def list_industries():
+    """Return all Damodaran industries for the frontend dropdown."""
+    try:
+        rows = get_industries()
+        return jsonify({'industries': rows, 'count': len(rows)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/growth-rate', methods=['GET'])
+def get_growth_rate():
+    """Calculate industry-adjusted g for a given industry and currency."""
+    industry = request.args.get('industry', '').strip()
+    currency = request.args.get('currency', 'USD').upper()
+    if not industry:
+        return jsonify({'error': 'industry parameter required'}), 400
+    try:
+        result = calculate_industry_growth(industry, currency)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/damodaran-status', methods=['GET'])
+def damodaran_status():
+    auth_err = _require_admin_key()
+    if auth_err:
+        return auth_err
+    try:
+        return jsonify(get_damodaran_status())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/update-damodaran', methods=['POST'])
+def update_damodaran():
+    auth_err = _require_admin_key()
+    if auth_err:
+        return auth_err
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'JSON body required'}), 400
+        result = update_damodaran_data(data)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/valuation/<ticker>', methods=['GET'])
 def get_valuation(ticker):
     try:
@@ -268,7 +332,9 @@ def get_valuation(ticker):
         print(f"Processing {ticker} (Market: {market})")
         print(f"{'='*50}")
 
-        cache_key = f"{ticker}_{market}_{int(time.time() / _cache_timeout)}"
+        industry = request.args.get('industry', '').strip()
+        growth_override_param = request.args.get('growth_override', '').strip()
+        cache_key = f"{ticker}_{market}_{industry}_{growth_override_param}_{int(time.time() / _cache_timeout)}"
         if cache_key in _cache:
             return jsonify(_cache[cache_key])
 
@@ -403,6 +469,27 @@ def get_valuation(ticker):
                 market_return = 0.10
                 currency = 'USD'
 
+        # Industry-adjusted growth rate (Damodaran methodology)
+        industry_growth_info = None
+        if growth_override_param:
+            try:
+                override_val = float(growth_override_param)
+                if 0.0 <= override_val <= 0.20:
+                    dividend_growth = override_val
+                    industry_growth_info = {
+                        'method': 'override',
+                        'source': f'Manual override ({override_val*100:.2f}%)',
+                        'note': None, 'capped': False
+                    }
+            except ValueError:
+                pass
+        elif industry:
+            ig = calculate_industry_growth(industry, currency)
+            ig['method'] = 'industry'
+            ig['industryName'] = industry
+            dividend_growth = ig['g']
+            industry_growth_info = ig
+
         # Calculate CAPM
         capm_return = risk_free_rate + beta * (market_return - risk_free_rate)
 
@@ -481,13 +568,27 @@ def get_valuation(ticker):
             'retentionRatio': round(float(retention_ratio), 4) if retention_ratio else None,
             'roe': None,
             'theoreticalPE': round(float(theoretical_pe), 2) if theoretical_pe else None,
+            'growthDetails': {
+                'method': industry_growth_info.get('method', 'historical'),
+                'industryName': industry_growth_info.get('industryName') if industry_growth_info else None,
+                'industryEpsGrowth': industry_growth_info.get('industry_eps_growth') if industry_growth_info else None,
+                'benchmarkEpsGrowth': industry_growth_info.get('benchmark_eps_growth') if industry_growth_info else None,
+                'weight': industry_growth_info.get('weight') if industry_growth_info else None,
+                'gdpBase': industry_growth_info.get('gdp_base') if industry_growth_info else None,
+                'capped': industry_growth_info.get('capped', False) if industry_growth_info else False,
+                'note': industry_growth_info.get('note') if industry_growth_info else None,
+                'damodaranYear': 2026,
+                'source': industry_growth_info.get('source', 'Historical dividends') if industry_growth_info else 'Historical dividends',
+            } if industry_growth_info else None,
+            'industryName': industry if industry else None,
+            'growthSource': industry_growth_info.get('source', 'Historical dividends') if industry_growth_info else 'Historical dividends',
             'sources': {
                 'beta': source,
                 'riskFreeRate': 'US 10-Year Treasury',
                 'marketReturn': 'Historical Average',
                 'currentPrice': source,
                 'dividend': source,
-                'dividendGrowth': 'Calculated from History'
+                'dividendGrowth': industry_growth_info.get('source', 'Historical dividends') if industry_growth_info else 'Calculated from History'
             }
         }
 
