@@ -749,13 +749,14 @@ def get_valuation(ticker):
         # Calculate CAPM
         capm_return = risk_free_rate + beta * (market_return - risk_free_rate)
 
-        # Cap dividend growth if needed
+        # Cap dividend growth if needed (skip for manual override — user-intentional)
         growth_warning = None
         historical_growth = dividend_growth
-        if dividend_growth >= capm_return - 0.02:
+        is_override = industry_growth_info and industry_growth_info.get('method') == 'override'
+        if not is_override and dividend_growth >= capm_return - 0.01:
             historical_growth = dividend_growth
-            dividend_growth = min(0.05, max(capm_return - 0.03, 0.03))
-            growth_warning = f"Growth capped from {historical_growth*100:.1f}% to {dividend_growth*100:.1f}%"
+            dividend_growth = min(capm_return - 0.01, max(capm_return - 0.03, 0.03))
+            growth_warning = f"Growth capped from {historical_growth*100:.1f}% to {dividend_growth*100:.1f}% (g must be < CAPM return)"
 
         # Gordon Model
         if dividend_rate > 0:

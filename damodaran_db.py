@@ -346,12 +346,17 @@ def calculate_industry_growth(industry_name, currency='USD'):
     weight = used_growth / benchmark_eps
     g = gdp_base * weight
 
-    # Step 5: Perpetuity ceiling
+    # Step 5: Cap logic
+    # - Allow g > gdp_base when weight > 1.0 (intentional sector outperformance)
+    # - Hard outer safety cap at 2× GDP_base
     capped = False
-    if g > 0.05:
-        g = 0.05
+    if g > gdp_base:
+        outperformance_note = f'Industry-adjusted rate: {g*100:.1f}% (above GDP baseline — reflects sector outperformance)'
+        note = f'{note}. {outperformance_note}' if note else outperformance_note
+    if g > 2 * gdp_base:
+        g = 2 * gdp_base
         capped = True
-        ceiling_note = 'Industry growth capped at 5% perpetuity ceiling'
+        ceiling_note = f'Industry growth capped at 2× GDP baseline ({2*gdp_base*100:.1f}%)'
         note = f'{note}. {ceiling_note}' if note else ceiling_note
 
     source_year = get_config('damodaran_source_year') or '2026'
