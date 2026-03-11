@@ -335,6 +335,39 @@ def map_tv_to_damodaran(sector, industry):
     return None
 
 
+def suggest_damodaran_industries(tv_sector, tv_industry, n=5):
+    """
+    Return top-N Damodaran industry names closest to the given TradingView
+    sector/industry strings, using token-overlap scoring.
+    Falls back to empty list if there is no meaningful input.
+    """
+    import re
+    from damodaran_db import get_industries
+
+    raw = f"{tv_industry or ''} {tv_sector or ''}".lower()
+    stop = {'and', 'or', 'the', 'of', 'for', 'in', 'a', 'an', 'to', 'with',
+            'at', 'by', 'from', 'as', 'is', 'are', 'its', 'it', 'be', 'was'}
+    tokens = set(re.findall(r'[a-z]+', raw)) - stop
+    if not tokens:
+        return []
+
+    industries = get_industries()
+    scores = []
+    for ind in industries:
+        name = ind['industry_name']
+        name_lower = name.lower()
+        name_tokens = set(re.findall(r'[a-z]+', name_lower)) - stop
+        # Exact token matches (weighted 2) + substring containment (weighted 1)
+        exact = len(tokens & name_tokens)
+        partial = sum(1 for t in tokens if len(t) > 3 and t in name_lower)
+        score = exact * 2 + partial
+        if score > 0:
+            scores.append((score, name))
+
+    scores.sort(key=lambda x: -x[0])
+    return [name for _, name in scores[:n]]
+
+
 def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
     """Fetch stock data from TradingView"""
     try:
@@ -711,6 +744,9 @@ def get_valuation(ticker):
         # Priority: 1) manual growth_override, 2) ?industry= param, 3) auto from TradingView sector
         industry_growth_info = None
         auto_detected_industry = None
+        industry_suggestions = []
+        raw_tv_sector = tv_data.get('tvSector') if tv_data else None
+        raw_tv_industry = tv_data.get('tvIndustry') if tv_data else None
 
         if growth_override_param:
             try:
@@ -729,14 +765,14 @@ def get_valuation(ticker):
             effective_industry = industry
             if not effective_industry:
                 # Auto-detect from TradingView sector/industry fields
-                tv_sector = tv_data.get('tvSector') if tv_data else None
-                tv_industry = tv_data.get('tvIndustry') if tv_data else None
-                effective_industry = map_tv_to_damodaran(tv_sector, tv_industry)
+                effective_industry = map_tv_to_damodaran(raw_tv_sector, raw_tv_industry)
                 auto_detected_industry = effective_industry
                 if effective_industry:
-                    print(f"[AUTO] {ticker}: TV sector={tv_sector!r}, industry={tv_industry!r} → Damodaran={effective_industry!r}")
+                    print(f"[AUTO] {ticker}: TV sector={raw_tv_sector!r}, industry={raw_tv_industry!r} → Damodaran={effective_industry!r}")
                 else:
-                    print(f"[AUTO] {ticker}: No sector match, using historical growth")
+                    print(f"[AUTO] {ticker}: No sector match, computing suggestions")
+                    industry_suggestions = suggest_damodaran_industries(raw_tv_sector, raw_tv_industry)
+                    print(f"[SUGGEST] {ticker}: {industry_suggestions}")
 
             if effective_industry:
                 ig = calculate_industry_growth(effective_industry, currency)
@@ -839,8 +875,9 @@ def get_valuation(ticker):
             } if industry_growth_info else None,
             'industryName': industry_growth_info.get('industryName') if industry_growth_info else None,
             'autoDetectedIndustry': auto_detected_industry,
-            'tvSector': tv_data.get('tvSector') if tv_data else None,
-            'tvIndustry': tv_data.get('tvIndustry') if tv_data else None,
+            'industrySuggestions': industry_suggestions,
+            'tvSector': raw_tv_sector,
+            'tvIndustry': raw_tv_industry,
             'growthSource': industry_growth_info.get('source', 'Historical dividends') if industry_growth_info else 'Historical dividends',
             'sources': {
                 'beta': source,

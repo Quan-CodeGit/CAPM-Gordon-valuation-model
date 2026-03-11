@@ -96,7 +96,7 @@
                 }
             };
 
-            const calculateValuation = async () => {
+            const calculateValuation = async (industryOverride = null) => {
                 if (!ticker.trim()) {
                     setError('Please enter a stock ticker');
                     return;
@@ -111,6 +111,9 @@
                     if (overrideEnabled && manualGrowth) {
                         const g = parseFloat(manualGrowth) / 100;
                         if (!isNaN(g) && g >= 0 && g <= 0.20) params.append('growth_override', g.toFixed(4));
+                    }
+                    if (industryOverride) {
+                        params.append('industry', industryOverride);
                     }
                     const response = await fetch(`${API_URL}/api/valuation/${ticker.toUpperCase()}?${params}`);
 
@@ -299,6 +302,7 @@
                                             type="number"
                                             value={manualGrowth}
                                             onChange={(e) => setManualGrowth(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && calculateValuation()}
                                             placeholder="e.g. 3.5"
                                             min="0" max="20" step="0.1"
                                             className="w-24 px-2 py-1 border border-amber-400 rounded text-amber-800 bg-white text-sm font-semibold"
@@ -485,7 +489,7 @@
                                                     <span className="font-bold">{result.growthDetails.gdpBase != null ? (Number(result.growthDetails.gdpBase) * 100).toFixed(1) + '%' : 'N/A'}</span>
                                                 </div>
                                                 <div className="border-t border-purple-200 pt-2 flex justify-between">
-                                                    <span className="text-gray-700 font-semibold">g = GDP × Weight{result.growthDetails.capped ? ' (capped at 5%)' : ''}:</span>
+                                                    <span className="text-gray-700 font-semibold">g = GDP × Weight{result.growthDetails.capped ? ' (outer cap applied)' : ''}:</span>
                                                     <span className="font-bold text-purple-700">{(result.dividendGrowth * 100).toFixed(2)}%</span>
                                                 </div>
                                                 {result.growthDetails.note && (
@@ -499,9 +503,30 @@
                                                 <p className="text-xs text-gray-500 mt-1">User-specified growth rate, bypassing Damodaran industry calculation.</p>
                                             </div>
                                         ) : (
-                                            <div className="text-sm">
-                                                <p className="text-gray-500 italic">Industry sector not recognized from TradingView data — using historical dividend CAGR.</p>
-                                                <p className="font-semibold text-gray-800 mt-1">g = {(result.dividendGrowth * 100).toFixed(2)}%</p>
+                                            <div className="text-sm space-y-2">
+                                                <p className="text-gray-500 italic">
+                                                    Industry not auto-recognized from TradingView
+                                                    {(result.tvIndustry || result.tvSector) && (
+                                                        <span className="not-italic text-gray-400"> ({[result.tvIndustry, result.tvSector].filter(Boolean).join(' · ')})</span>
+                                                    )}
+                                                    {' '}— using historical dividend CAGR.
+                                                </p>
+                                                <p className="font-semibold text-gray-800">g = {(result.dividendGrowth * 100).toFixed(2)}%</p>
+                                                {result.industrySuggestions && result.industrySuggestions.length > 0 && (
+                                                    <div className="mt-2">
+                                                        <p className="text-xs text-gray-500 mb-1.5">Closest Damodaran matches — select one to apply:</p>
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {result.industrySuggestions.map((ind) => (
+                                                                <button
+                                                                    key={ind}
+                                                                    onClick={() => calculateValuation(ind)}
+                                                                    disabled={loading}
+                                                                    className="text-xs px-2.5 py-1 rounded-full border border-purple-300 text-purple-700 bg-purple-50 hover:bg-purple-100 hover:border-purple-400 transition-colors disabled:opacity-50"
+                                                                >{ind}</button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
