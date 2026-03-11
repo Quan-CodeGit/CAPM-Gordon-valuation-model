@@ -246,6 +246,106 @@ For detailed documentation, see the "Model Assumptions & Limitations" section in
 
 **Sources**: [Investopedia CAPM](https://www.investopedia.com/terms/c/capm.asp) | [Investopedia Gordon Model](https://www.investopedia.com/terms/g/gordongrowthmodel.asp)
 
+## Updating Damodaran Industry Data (Annual — Every January)
+
+Damodaran publishes updated expected growth rates each January.
+No code changes are needed — the data lives in the SQLite database.
+
+### Step-by-step
+
+**1. Visit the source:**
+```
+https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/histgr.html
+```
+
+**2. Copy the new data** — you need:
+- "Expected Growth in EPS — Next 5 years" column
+- "Expected Growth in Revenues — Next 5 years" column
+- Include the **Total Market** row (required as benchmark denominator)
+
+**3. Format as JSON:**
+```json
+{
+  "source_year": 2027,
+  "industries": [
+    {
+      "industry_name": "Software (System & Application)",
+      "eps_growth_next5yr": 24.10,
+      "revenue_growth_next5yr": 13.50
+    },
+    {
+      "industry_name": "Total Market",
+      "eps_growth_next5yr": 14.20,
+      "revenue_growth_next5yr": 16.00
+    }
+  ]
+}
+```
+
+**4. Send the update:**
+```bash
+curl -X POST https://capm-gordon-valuation-model-1.onrender.com/admin/update-damodaran \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: YOUR_ADMIN_KEY" \
+  -d @new_data_2027.json
+```
+
+Expected response:
+```json
+{
+  "success": true,
+  "industries_updated": 94,
+  "new_benchmark": 14.20,
+  "source_year": 2027
+}
+```
+
+**5. Verify:**
+```bash
+curl https://capm-gordon-valuation-model-1.onrender.com/admin/damodaran-status \
+  -H "X-Admin-Key: YOUR_ADMIN_KEY"
+```
+
+**6. Make the change permanent** (Render resets DB on restart):
+Edit `INDUSTRY_DATA_2026` in `damodaran_db.py` with the new figures, then redeploy.
+
+### Setting the Admin Key
+
+On Render: Dashboard → your service → **Environment** → add:
+```
+ADMIN_KEY = your-secret-key-here
+```
+
+Locally: set the environment variable before starting the server:
+```bash
+ADMIN_KEY=your-key python backend_damodaran.py
+```
+
+### Growth Rate Formula
+
+```
+weight = industry_eps_growth_next5yr / Total_Market_eps_growth_next5yr
+g      = GDP_base(currency) × weight
+g      = min(g, 5%)   ← perpetuity ceiling
+```
+
+GDP base rates (in `damodaran_db.py` → `APP_CONFIG_2026`):
+
+| Currency | Rate  | Rationale                        |
+|----------|-------|----------------------------------|
+| USD      | 3.8%  | FOMC long-run guidance           |
+| AUD      | 4.0%  | RBA potential + inflation band   |
+| VND      | 5.5%  | Vietnam government growth target |
+
+**Worked example** — Retail (Grocery and Food), USD, Damodaran 2026:
+```
+eps_growth = 11.14%,  benchmark = 13.95%,  gdp_usd = 3.8%
+weight     = 11.14 / 13.95 = 0.799
+g          = 3.8% × 0.799  = 3.04%
+```
+
+---
+
 ## Disclaimer
 
 This tool is for educational purposes only. The analysis is based on theoretical financial models, and actual stock prices may differ significantly due to market sentiment, company-specific events, macroeconomic factors, and other variables not captured by these models.

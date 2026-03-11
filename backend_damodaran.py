@@ -33,8 +33,24 @@ import json
 from datetime import datetime, timedelta
 import pandas as pd
 
+from damodaran_db import (
+    init_db, get_industries, get_benchmark, get_config,
+    calculate_industry_growth, update_damodaran_data, get_damodaran_status,
+)
+
 app = Flask(__name__)
 CORS(app)
+
+# Initialise SQLite database (seeds 2026 data on first run)
+init_db()
+
+# Admin key — set ADMIN_KEY env var in production (Render → Environment tab)
+ADMIN_KEY = os.environ.get('ADMIN_KEY', 'dev-key-change-in-production')
+
+
+def _require_admin_key():
+    """Returns True if the request carries a valid X-Admin-Key header."""
+    return request.headers.get('X-Admin-Key', '') == ADMIN_KEY
 
 # ============================================================================
 # DAMODARAN METHODOLOGY - January 2026 Update
@@ -344,6 +360,112 @@ def get_us_risk_free_rate():
     print(f"[DAMODARAN] Using fallback US 10Y Treasury rate: 4.20%")
     return 0.042
 
+# ============================================================================
+# Industry / growth-rate endpoints
+# ============================================================================
+
+@app.route('/api/industries', methods=['GET'])
+def api_industries():
+    """
+    GET /api/industries
+    Returns all industries A-Z plus benchmark and freshness metadata.
+    """
+    industries = get_industries()
+    benchmark  = get_benchmark()
+    status     = get_damodaran_status()
+    return jsonify({
+        'industries':         industries,
+        'benchmark_eps_growth': benchmark['eps_growth_next5yr'] if benchmark else None,
+        'source_year':        status['source_year'],
+        'last_updated':       status['last_updated'],
+        'source_url':         get_config('damodaran_source_url'),
+    })
+
+
+@app.route('/api/growth-rate', methods=['GET'])
+def api_growth_rate():
+    """
+    GET /api/growth-rate?industry=<name>&currency=<USD|AUD|VND>
+    Returns the industry-adjusted perpetuity growth rate for real-time
+    display as the user selects an industry in the frontend.
+    """
+    industry = request.args.get('industry', '').strip()
+    currency = request.args.get('currency', 'USD').upper()
+    if not industry:
+        return jsonify({'error': 'industry parameter required'}), 400
+    result = calculate_industry_growth(industry, currency)
+    return jsonify(result)
+
+
+# ============================================================================
+# Admin endpoints  (protected by X-Admin-Key header)
+# ============================================================================
+
+@app.route('/admin/damodaran-status', methods=['GET'])
+def admin_damodaran_status():
+    """
+    GET /admin/damodaran-status
+    Returns a summary of the current database state.
+    """
+    if not _require_admin_key():
+        return jsonify({'error': 'Unauthorized — provide X-Admin-Key header'}), 401
+    return jsonify(get_damodaran_status())
+
+
+@app.route('/admin/update-damodaran', methods=['POST'])
+def admin_update_damodaran():
+    """
+    POST /admin/update-damodaran
+    Upserts the full industry dataset.  Use each January when Damodaran
+    releases new data.  See README.md → "Updating Damodaran Data".
+
+    Required body:
+    {
+      "source_year": 2027,
+      "industries": [
+        { "industry_name": "...", "eps_growth_next5yr": 22.5, "revenue_growth_next5yr": 13.1 },
+        { "industry_name": "Total Market", ... }
+      ]
+    }
+    """
+    if not _require_admin_key():
+        return jsonify({'error': 'Unauthorized — provide X-Admin-Key header'}), 401
+
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    source_year = body.get('source_year')
+    industries  = body.get('industries', [])
+
+    if not source_year:
+        return jsonify({'error': 'source_year required'}), 400
+    if not industries:
+        return jsonify({'error': 'industries list required'}), 400
+
+    # Total Market row is mandatory — it is the benchmark denominator
+    total_market = next(
+        (i for i in industries if i.get('industry_name') == 'Total Market'), None
+    )
+    if not total_market:
+        return jsonify({'error': 'Total Market row required as benchmark denominator'}), 400
+
+    count        = update_damodaran_data(source_year, industries)
+    new_benchmark = total_market.get('eps_growth_next5yr')
+
+    print(f"[ADMIN] Damodaran data updated: {count} rows, year={source_year}, benchmark={new_benchmark}")
+    return jsonify({
+        'success':           True,
+        'industries_updated': count,
+        'new_benchmark':     new_benchmark,
+        'source_year':       source_year,
+    })
+
+
+# ============================================================================
+# Valuation endpoint
+# ============================================================================
+
 @app.route('/api/valuation/<ticker>', methods=['GET'])
 def get_valuation(ticker):
     try:
@@ -442,8 +564,35 @@ def get_valuation(ticker):
             except:
                 pass
 
-        # Apply growth capping
+        # ----------------------------------------------------------------
+        # Industry-adjusted or manually overridden growth rate
+        # Priority: growth_override > industry > existing historical logic
+        # ----------------------------------------------------------------
+        industry             = request.args.get('industry', '').strip()
+        growth_override_param = request.args.get('growth_override', '').strip()
+        industry_growth_info  = None
+
+        if growth_override_param:
+            try:
+                override_val = float(growth_override_param)
+                if 0.0 <= override_val <= 0.20:
+                    dividend_growth      = override_val
+                    industry_growth_info = {
+                        'source': f'Manual override ({override_val * 100:.2f}%)',
+                        'note':   None,
+                        'capped': False,
+                    }
+            except (ValueError, TypeError):
+                pass
+        elif industry:
+            ig                   = calculate_industry_growth(industry, currency)
+            dividend_growth      = ig['g']
+            industry_growth_info = ig
+
+        # Apply growth capping (CAPM safety floor — still runs after industry override)
         growth_warning = None
+        if industry_growth_info and industry_growth_info.get('note'):
+            growth_warning = industry_growth_info['note']
         historical_dividend_growth = historical_growth
 
         if dividend_growth >= capm_return - 0.02:
@@ -529,13 +678,34 @@ def get_valuation(ticker):
             'theoreticalPE': float(round(theoretical_pe, 2)) if theoretical_pe else None,
             'methodology': 'Damodaran',
             'methodologyNote': f'Using Damodaran Country Risk Premium method. Total ERP ({total_erp*100:.2f}%) = Mature Market ERP ({MATURE_MARKET_ERP*100:.2f}%) + Country Risk Premium ({country_risk_premium*100:.2f}%)',
+            'industryName':       industry if industry else None,
+            'growthSource':       (industry_growth_info.get('source')
+                                   if industry_growth_info else 'Historical data'),
+            'growthDetails': {
+                'method':             ('manual-override' if growth_override_param
+                                       else 'industry'   if industry
+                                       else 'historical'),
+                'industryEpsGrowth':  (industry_growth_info.get('industry_eps_growth')
+                                       if industry_growth_info else None),
+                'benchmarkEpsGrowth': (industry_growth_info.get('benchmark_eps_growth')
+                                       if industry_growth_info else None),
+                'weight':             (round(industry_growth_info['weight'], 4)
+                                       if industry_growth_info and industry_growth_info.get('weight') is not None
+                                       else None),
+                'gdpBase':            (industry_growth_info.get('gdp_base')
+                                       if industry_growth_info else None),
+                'capped':             (industry_growth_info.get('capped', False)
+                                       if industry_growth_info else False),
+                'damodaranYear':      int(get_config('damodaran_source_year') or 2026),
+            } if industry_growth_info else None,
             'sources': {
                 'beta': tv_data['source'],
                 'riskFreeRate': 'US 10-Year Treasury (Damodaran method uses US rate globally)',
                 'equityRiskPremium': f'Damodaran Country Risk Data (Jan 2026) - {sovereign_rating} rated',
                 'currentPrice': tv_data['source'],
                 'dividend': tv_data['source'],
-                'dividendGrowth': 'Calculated from Historical Data'
+                'dividendGrowth': (industry_growth_info.get('source')
+                                   if industry_growth_info else 'Calculated from Historical Data'),
             }
         }
 
@@ -570,12 +740,17 @@ def health_check():
 def serve_frontend():
     return send_from_directory('.', 'index_damodaran.html')
 
+@app.route('/config.js')
+def serve_damodaran_config():
+    """Serve Damodaran-specific config that points to port 5001"""
+    return send_from_directory('.', 'config_damodaran.js')
+
 @app.route('/<path:path>')
 def serve_static(path):
     try:
         return send_from_directory('.', path)
     except:
-        return send_from_directory('.', 'index_damodaran.html')
+        return send_from_directory('.', 'index.html')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))  # Use port 5001 to avoid conflict

@@ -49,6 +49,13 @@ Thumbs.db
 *.cache
 .cache/
 
+# SQLite database — auto-generated from seed data on startup, do not commit
+*.db
+damodaran.db
+
+# Runtime-generated dividend growth cache
+dividend_growth_cache.json
+
 # Test files (optional - uncomment if you want to exclude)
 # vnstock_first_row.txt
 
