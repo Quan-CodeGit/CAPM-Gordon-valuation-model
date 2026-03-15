@@ -466,22 +466,48 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         return None
 
 def get_ttm_dividend(ticker, is_au_stock=False):
-    """Get trailing 12-month dividend from yfinance (actual paid dividends)"""
+    """
+    Get annual dividend from yfinance by detecting payment frequency and
+    taking exactly the right number of most-recent payments.
+      Quarterly → last 4 payments
+      Semi-annual → last 2 payments
+      Annual → last 1 payment
+    This avoids the 5-payment over-count that occurs when a 13-month window
+    straddles two calendar years for quarterly payers.
+    """
     try:
         import yfinance as yf
-        from datetime import datetime, timedelta
 
         yf_ticker = ticker + ".AX" if is_au_stock else ticker
         stock = yf.Ticker(yf_ticker)
         dividends = stock.dividends
 
-        if dividends is not None and len(dividends) > 0:
-            one_year_ago = datetime.now() - timedelta(days=395)  # ~13 months for safety
-            recent = dividends[dividends.index >= one_year_ago.strftime('%Y-%m-%d')]
-            if len(recent) > 0:
-                ttm_div = float(recent.sum())
-                print(f"[DIVIDEND] {ticker} TTM dividend from yfinance: {ttm_div:.4f} ({len(recent)} payments)")
-                return ttm_div
+        if dividends is None or len(dividends) == 0:
+            return None
+
+        # Detect frequency from the median gap between recent payments
+        recent_all = dividends.tail(8)
+        if len(recent_all) >= 2:
+            gaps = recent_all.index.to_series().diff().dropna().dt.days
+            median_gap = gaps.median()
+        else:
+            median_gap = 90  # assume quarterly
+
+        if median_gap <= 50:
+            payments_per_year = 12   # monthly
+        elif median_gap <= 110:
+            payments_per_year = 4    # quarterly
+        elif median_gap <= 200:
+            payments_per_year = 2    # semi-annual
+        else:
+            payments_per_year = 1    # annual
+
+        last_n = dividends.tail(payments_per_year)
+        annual_div = float(last_n.sum())
+        print(f"[DIVIDEND] {ticker} annual dividend: {annual_div:.4f} "
+              f"(last {payments_per_year} payments, median gap {median_gap:.0f}d)")
+        return annual_div
+
     except Exception as e:
         print(f"[DIVIDEND] yfinance failed for {ticker}: {e}")
     return None
