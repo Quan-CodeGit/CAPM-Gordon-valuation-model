@@ -443,14 +443,17 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
 
         if div_per_share_fy and div_per_share_fy > 0:
             dividend_rate = div_per_share_fy
+            has_fy_dividend = True
         else:
             dividend_rate = current_price * dividend_yield if dividend_yield else 0
+            has_fy_dividend = False
 
         return {
             'currentPrice': current_price,
             'beta': beta if beta is not None else 1.0,
             'companyName': company_name,
             'dividend': dividend_rate,
+            'hasFYDividend': has_fy_dividend,
             'dividendYield': dividend_yield,
             'peRatio': pe_ratio,
             'eps': eps,
@@ -684,15 +687,20 @@ def get_valuation(ticker):
             company_name = tv_data['companyName']
             source = tv_data['source']
 
-            # Get actual TTM dividend from yfinance (more accurate than yield × price)
-            # TradingView's dividend_yield is "indicated" (forward-looking), not TTM
-            ttm_div = get_ttm_dividend(ticker, is_au_stock)
-            if ttm_div and ttm_div > 0:
-                dividend_rate = ttm_div
-                print(f"[DEBUG] {ticker} Using TTM dividend from yfinance: {dividend_rate:.4f}")
-            else:
+            # Dividend source priority:
+            # 1. TradingView dividends_per_share_fy — actual FY annual (most accurate, matches TV chart)
+            # 2. yfinance TTM sum — only used when TV has no FY data (falls back to yield × price estimate)
+            if tv_data.get('hasFYDividend'):
                 dividend_rate = tv_data['dividend']
-                print(f"[DEBUG] {ticker} Using TradingView dividend (yield × price): {dividend_rate:.4f}")
+                print(f"[DEBUG] {ticker} Using TradingView FY dividend: {dividend_rate:.4f}")
+            else:
+                ttm_div = get_ttm_dividend(ticker, is_au_stock)
+                if ttm_div and ttm_div > 0:
+                    dividend_rate = ttm_div
+                    print(f"[DEBUG] {ticker} Using yfinance TTM dividend (TV had no FY data): {dividend_rate:.4f}")
+                else:
+                    dividend_rate = tv_data['dividend']
+                    print(f"[DEBUG] {ticker} Using TradingView dividend (yield × price fallback): {dividend_rate:.4f}")
 
             # Get EPS and P/E from TradingView
             # - P/E from TradingView is always correct (currency-neutral) → use directly
