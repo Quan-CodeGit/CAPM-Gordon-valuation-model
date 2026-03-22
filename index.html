@@ -8,447 +8,507 @@
     <meta http-equiv="Expires" content="0">
     <title>CAPM & Gordon Model — Stock Valuation Terminal</title>
 
-    <!-- Google Fonts: Sora (UI) + DM Mono (numbers/tickers) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- React and ReactDOM from CDN -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-
-    <!-- Babel for JSX transformation -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- Vercel Web Analytics -->
     <script defer src="https://va.vercel-scripts.com/v1/script.debug.js"></script>
-
-    <!-- Configuration -->
     <script src="config.js"></script>
 
     <style>
         :root {
-            --bg: #070b14;
-            --bg-card: rgba(13, 21, 38, 0.85);
-            --bg-card-solid: #0d1526;
-            --border: rgba(255,255,255,0.07);
-            --border-bright: rgba(255,255,255,0.14);
-            --bull: #00e676;
-            --bull-dim: rgba(0, 230, 118, 0.12);
-            --bull-glow: 0 0 40px rgba(0, 230, 118, 0.25), 0 0 80px rgba(0, 230, 118, 0.1);
-            --bear: #ff3b5c;
-            --bear-dim: rgba(255, 59, 92, 0.12);
-            --bear-glow: 0 0 40px rgba(255, 59, 92, 0.25), 0 0 80px rgba(255, 59, 92, 0.1);
-            --capm-blue: #60a5fa;
-            --capm-dim: rgba(96, 165, 250, 0.1);
-            --gold: #fbbf24;
-            --gold-dim: rgba(251, 191, 36, 0.1);
-            --text: #e2e8f0;
-            --text-muted: #64748b;
-            --text-faint: #374151;
+            --bg: #05080f;
+            --card-bg: rgba(10, 16, 30, 0.82);
+            --card-border: rgba(255,255,255,0.09);
+            --card-border-bright: rgba(255,255,255,0.18);
+            --bull: #10f07a;
+            --bull-glow: rgba(16, 240, 122, 0.22);
+            --bear: #ff4060;
+            --bear-glow: rgba(255, 64, 96, 0.22);
+            --blue: #5eadff;
+            --blue-glow: rgba(94, 173, 255, 0.15);
+            --gold: #ffc445;
+            --purple: #c084fc;
+            --text-primary: #f0f4ff;
+            --text-secondary: #8fa3c0;
+            --text-dim: #3d5070;
             --mono: 'DM Mono', monospace;
             --sans: 'Sora', sans-serif;
         }
 
-        * { box-sizing: border-box; }
+        *, *::before, *::after { box-sizing: border-box; }
 
         body {
             margin: 0; padding: 0;
             font-family: var(--sans);
             background: var(--bg);
-            color: var(--text);
+            color: var(--text-primary);
             -webkit-font-smoothing: antialiased;
-            min-height: 100vh;
             overflow-x: hidden;
+            min-height: 100vh;
         }
 
-        /* ── Background ───────────────────────────────── */
-        body::before {
-            content: '';
-            position: fixed; inset: 0;
-            background:
-                radial-gradient(ellipse 60% 50% at 15% 30%, rgba(0,230,118,0.04) 0%, transparent 70%),
-                radial-gradient(ellipse 50% 60% at 85% 70%, rgba(255,59,92,0.04) 0%, transparent 70%),
-                radial-gradient(ellipse 40% 40% at 50% 10%, rgba(96,165,250,0.03) 0%, transparent 60%);
-            pointer-events: none; z-index: 0;
-            animation: orb-drift 20s ease-in-out infinite alternate;
-        }
-        @keyframes orb-drift {
-            0%   { opacity: 0.6; transform: scale(1) translateY(0px); }
-            100% { opacity: 1;   transform: scale(1.08) translateY(-20px); }
-        }
-
-        /* Dot grid */
-        body::after {
-            content: '';
-            position: fixed; inset: 0;
-            background-image: radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px);
-            background-size: 28px 28px;
-            pointer-events: none; z-index: 0;
-        }
-
-        /* ── Cards ────────────────────────────────────── */
-        .card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            backdrop-filter: blur(12px);
-            transition: border-color 0.2s;
-        }
-        .card:hover { border-color: var(--border-bright); }
-
-        .card-bull {
-            background: linear-gradient(135deg, rgba(0,230,118,0.08) 0%, rgba(13,21,38,0.9) 60%);
-            border-color: rgba(0,230,118,0.2);
-            box-shadow: var(--bull-glow);
-        }
-        .card-bear {
-            background: linear-gradient(135deg, rgba(255,59,92,0.08) 0%, rgba(13,21,38,0.9) 60%);
-            border-color: rgba(255,59,92,0.2);
-            box-shadow: var(--bear-glow);
-        }
-
-        /* ── Typography ───────────────────────────────── */
-        .mono { font-family: var(--mono); }
-        .ticker-font { font-family: var(--mono); letter-spacing: 0.08em; }
-
-        /* ── Verdict banner ───────────────────────────── */
-        .verdict-banner {
-            border-radius: 14px;
-            padding: 28px 32px;
-            position: relative;
-            overflow: hidden;
-            animation: fadeSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .verdict-banner::before {
-            content: '';
-            position: absolute; inset: 0;
-            background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 60%);
+        /* ── Star canvas layer ─────────────────────────── */
+        #star-canvas {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
             pointer-events: none;
         }
+
+        /* ── Nebula glow ───────────────────────────────── */
+        #nebula {
+            position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background:
+                radial-gradient(ellipse 70% 55% at 18% 25%, rgba(16,240,122,0.055) 0%, transparent 65%),
+                radial-gradient(ellipse 55% 65% at 88% 72%, rgba(255,64,96,0.055) 0%, transparent 65%),
+                radial-gradient(ellipse 45% 45% at 55% 5%,  rgba(94,173,255,0.04) 0%, transparent 60%);
+            animation: nebula-drift 24s ease-in-out infinite alternate;
+        }
+        @keyframes nebula-drift {
+            0%   { opacity: 0.7; transform: scale(1); }
+            100% { opacity: 1;   transform: scale(1.06) translateY(-14px); }
+        }
+
+        /* ── App wrapper ───────────────────────────────── */
+        #app { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 16px 14px 56px; }
+
+        /* ── Cards ─────────────────────────────────────── */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.25s, box-shadow 0.25s;
+        }
+        .card::before {
+            content: '';
+            position: absolute; top: 0; left: 8%; right: 8%; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
+            pointer-events: none;
+        }
+        .card:hover { border-color: var(--card-border-bright); }
+
+        /* ── Section label ─────────────────────────────── */
+        .section-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            font-weight: 600;
+        }
+
+        /* ── Verdict banner ────────────────────────────── */
+        .verdict {
+            border-radius: 16px;
+            padding: 28px 28px 24px;
+            position: relative; overflow: hidden;
+            animation: fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) both;
+        }
         .verdict-bull {
-            background: linear-gradient(135deg, rgba(0,230,118,0.15) 0%, rgba(0,180,90,0.08) 40%, rgba(13,21,38,0.95) 100%);
-            border: 1px solid rgba(0,230,118,0.3);
-            box-shadow: var(--bull-glow), inset 0 1px 0 rgba(0,230,118,0.15);
+            background: linear-gradient(135deg, rgba(16,240,122,0.13) 0%, rgba(8,20,36,0.96) 55%);
+            border: 1px solid rgba(16,240,122,0.28);
+            box-shadow: 0 0 60px rgba(16,240,122,0.12), 0 0 120px rgba(16,240,122,0.06), inset 0 1px 0 rgba(16,240,122,0.2);
         }
         .verdict-bear {
-            background: linear-gradient(135deg, rgba(255,59,92,0.15) 0%, rgba(200,30,60,0.08) 40%, rgba(13,21,38,0.95) 100%);
-            border: 1px solid rgba(255,59,92,0.3);
-            box-shadow: var(--bear-glow), inset 0 1px 0 rgba(255,59,92,0.15);
+            background: linear-gradient(135deg, rgba(255,64,96,0.13) 0%, rgba(8,20,36,0.96) 55%);
+            border: 1px solid rgba(255,64,96,0.28);
+            box-shadow: 0 0 60px rgba(255,64,96,0.12), 0 0 120px rgba(255,64,96,0.06), inset 0 1px 0 rgba(255,64,96,0.2);
         }
-        .verdict-label-bull { color: var(--bull); text-shadow: 0 0 20px rgba(0,230,118,0.5); }
-        .verdict-label-bear { color: var(--bear); text-shadow: 0 0 20px rgba(255,59,92,0.5); }
+        .verdict::after {
+            content: '';
+            position: absolute; top: -60px; right: -60px;
+            width: 200px; height: 200px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,255,255,0.04) 0%, transparent 70%);
+            pointer-events: none;
+        }
 
-        /* ── Animations ───────────────────────────────── */
-        @keyframes fadeSlideUp {
-            from { opacity: 0; transform: translateY(16px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to   { opacity: 1; }
-        }
-        .animate-fade-up { animation: fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1) both; }
-        .animate-fade-up-delay-1 { animation: fadeSlideUp 0.4s 0.08s cubic-bezier(0.16,1,0.3,1) both; }
-        .animate-fade-up-delay-2 { animation: fadeSlideUp 0.4s 0.16s cubic-bezier(0.16,1,0.3,1) both; }
-        .animate-fade-up-delay-3 { animation: fadeSlideUp 0.4s 0.24s cubic-bezier(0.16,1,0.3,1) both; }
-        .animate-fade-up-delay-4 { animation: fadeSlideUp 0.4s 0.32s cubic-bezier(0.16,1,0.3,1) both; }
-        .animate-fade-up-delay-5 { animation: fadeSlideUp 0.4s 0.40s cubic-bezier(0.16,1,0.3,1) both; }
+        /* ── Text ──────────────────────────────────────── */
+        .text-bull  { color: var(--bull); }
+        .text-bear  { color: var(--bear); }
+        .text-blue  { color: var(--blue); }
+        .text-gold  { color: var(--gold); }
+        .text-purple{ color: var(--purple); }
 
-        /* Return bar fill animation */
-        @keyframes bar-grow {
-            from { width: 0; }
-            to   { width: var(--target-w); }
-        }
-        .bar-fill { animation: bar-grow 0.8s 0.3s cubic-bezier(0.34,1.56,0.64,1) both; }
+        .glow-bull { text-shadow: 0 0 24px rgba(16,240,122,0.55); }
+        .glow-bear { text-shadow: 0 0 24px rgba(255,64,96,0.55); }
 
-        /* ── Loading candlestick ──────────────────────── */
-        @keyframes candle-a {
-            0%,100% { transform: scaleY(0.4); }
-            50%      { transform: scaleY(1); }
-        }
-        @keyframes candle-b {
-            0%,100% { transform: scaleY(1); }
-            50%      { transform: scaleY(0.35); }
-        }
-        @keyframes candle-c {
-            0%,100% { transform: scaleY(0.6); }
-            33%      { transform: scaleY(1); }
-            66%      { transform: scaleY(0.3); }
-        }
-        .candle-a { animation: candle-a 1.2s ease-in-out infinite; transform-origin: bottom; }
-        .candle-b { animation: candle-b 1s 0.2s ease-in-out infinite; transform-origin: bottom; }
-        .candle-c { animation: candle-c 1.1s 0.4s ease-in-out infinite; transform-origin: bottom; }
+        .num { font-family: var(--mono); }
 
-        /* ── Input ────────────────────────────────────── */
-        .terminal-input {
+        /* ── Animations ────────────────────────────────── */
+        @keyframes fadeUp {
+            from { opacity:0; transform: translateY(18px); }
+            to   { opacity:1; transform: translateY(0); }
+        }
+        .a0 { animation: fadeUp 0.45s 0.00s cubic-bezier(0.16,1,0.3,1) both; }
+        .a1 { animation: fadeUp 0.45s 0.08s cubic-bezier(0.16,1,0.3,1) both; }
+        .a2 { animation: fadeUp 0.45s 0.16s cubic-bezier(0.16,1,0.3,1) both; }
+        .a3 { animation: fadeUp 0.45s 0.24s cubic-bezier(0.16,1,0.3,1) both; }
+        .a4 { animation: fadeUp 0.45s 0.32s cubic-bezier(0.16,1,0.3,1) both; }
+        .a5 { animation: fadeUp 0.45s 0.40s cubic-bezier(0.16,1,0.3,1) both; }
+
+        /* Bar grow */
+        @keyframes barGrow { from { width:0; } }
+        .bar-animated { animation: barGrow 0.9s 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
+
+        /* Candle loader */
+        @keyframes ca { 0%,100%{transform:scaleY(0.35)} 50%{transform:scaleY(1)} }
+        @keyframes cb { 0%,100%{transform:scaleY(1)}    50%{transform:scaleY(0.3)} }
+        @keyframes cc { 0%,33%{transform:scaleY(0.6)}   66%{transform:scaleY(0.28)} 100%{transform:scaleY(0.9)} }
+        .ca { animation: ca 1.15s ease-in-out infinite; transform-origin:bottom; }
+        .cb { animation: cb 1.0s 0.2s ease-in-out infinite; transform-origin:bottom; }
+        .cc { animation: cc 1.1s 0.4s ease-in-out infinite; transform-origin:bottom; }
+
+        /* Pulse dot */
+        @keyframes pulseDot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.45;transform:scale(0.75)} }
+        .pulse-dot { animation: pulseDot 2.2s ease-in-out infinite; }
+
+        /* ── Inputs ────────────────────────────────────── */
+        .ticker-input {
             background: rgba(255,255,255,0.04);
-            border: 1.5px solid var(--border-bright);
+            border: 1.5px solid rgba(255,255,255,0.14);
             border-radius: 10px;
-            color: var(--text);
+            color: #fff;
             font-family: var(--mono);
-            font-size: 1.2rem;
+            font-size: 1.15rem;
             font-weight: 500;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.07em;
             outline: none;
-            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+            padding: 13px 18px;
             width: 100%;
-            padding: 14px 18px;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
         }
-        .terminal-input:focus {
-            border-color: var(--capm-blue);
-            background: rgba(96,165,250,0.05);
-            box-shadow: 0 0 0 3px rgba(96,165,250,0.1), 0 0 20px rgba(96,165,250,0.1);
+        .ticker-input:focus {
+            border-color: var(--blue);
+            background: rgba(94,173,255,0.06);
+            box-shadow: 0 0 0 3px rgba(94,173,255,0.12), 0 0 20px rgba(94,173,255,0.08);
         }
-        .terminal-input::placeholder { color: var(--text-muted); font-weight: 300; letter-spacing: 0.04em; }
-        .terminal-input:disabled { opacity: 0.5; cursor: not-allowed; }
+        .ticker-input::placeholder { color: var(--text-dim); font-weight: 300; }
+        .ticker-input:disabled { opacity: 0.45; cursor: not-allowed; }
 
         .override-input {
-            background: rgba(251,191,36,0.06);
-            border: 1.5px solid rgba(251,191,36,0.3);
+            background: rgba(255,196,69,0.07);
+            border: 1.5px solid rgba(255,196,69,0.3);
             border-radius: 8px;
             color: var(--gold);
             font-family: var(--mono);
-            font-size: 1rem;
+            font-size: 0.95rem;
             font-weight: 500;
             outline: none;
-            width: 80px;
             padding: 6px 10px;
+            width: 78px;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
         .override-input:focus {
             border-color: var(--gold);
-            box-shadow: 0 0 0 3px rgba(251,191,36,0.1);
+            box-shadow: 0 0 0 3px rgba(255,196,69,0.1);
         }
 
-        /* ── Buttons ──────────────────────────────────── */
+        /* ── Buttons ───────────────────────────────────── */
         .btn-analyze {
-            background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
-            border: none;
-            border-radius: 10px;
-            color: white;
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            border: none; border-radius: 10px;
+            color: #fff;
             font-family: var(--sans);
-            font-weight: 600;
-            font-size: 0.95rem;
-            letter-spacing: 0.02em;
-            padding: 14px 28px;
-            cursor: pointer;
-            transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
-            box-shadow: 0 4px 15px rgba(99,102,241,0.3);
-            white-space: nowrap;
+            font-size: 0.93rem; font-weight: 600;
+            padding: 13px 26px;
+            cursor: pointer; white-space: nowrap;
+            box-shadow: 0 4px 18px rgba(99,102,241,0.35);
+            transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
         }
         .btn-analyze:hover:not(:disabled) {
-            opacity: 0.9; transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(99,102,241,0.4);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 24px rgba(99,102,241,0.5);
         }
-        .btn-analyze:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+        .btn-analyze:disabled { opacity: 0.38; cursor: not-allowed; transform: none; }
 
         .market-btn {
-            background: rgba(255,255,255,0.03);
-            border: 1.5px solid var(--border-bright);
+            background: rgba(255,255,255,0.035);
+            border: 1.5px solid rgba(255,255,255,0.1);
             border-radius: 10px;
-            color: var(--text-muted);
+            color: var(--text-secondary);
             font-family: var(--sans);
-            font-weight: 500;
-            font-size: 0.9rem;
-            padding: 10px 16px;
+            font-size: 0.88rem; font-weight: 500;
+            padding: 10px 14px;
             cursor: pointer;
-            transition: all 0.18s;
             display: flex; align-items: center; gap: 8px; justify-content: center;
+            transition: all 0.18s;
         }
-        .market-btn:hover:not(:disabled) {
-            border-color: var(--border-bright);
-            background: rgba(255,255,255,0.06);
-            color: var(--text);
-        }
-        .market-btn.active-vn { background: rgba(220,38,38,0.12); border-color: rgba(220,38,38,0.4); color: #fca5a5; }
-        .market-btn.active-us { background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.4); color: #93c5fd; }
-        .market-btn.active-au { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.4); color: #86efac; }
+        .market-btn:hover:not(:disabled) { background: rgba(255,255,255,0.07); color: var(--text-primary); border-color: rgba(255,255,255,0.2); }
+        .mkt-vn { background: rgba(220,38,38,0.1); border-color: rgba(220,38,38,0.35); color: #fca5a5; }
+        .mkt-us { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.35); color: #93c5fd; }
+        .mkt-au { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.35); color: #86efac; }
 
-        /* ── Pill tag ─────────────────────────────────── */
-        .ticker-pill {
+        /* ── Ticker pill ───────────────────────────────── */
+        .tkr-pill {
             background: rgba(255,255,255,0.04);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 3px 8px;
+            border: 1px solid rgba(255,255,255,0.09);
+            border-radius: 7px;
+            padding: 4px 9px;
             font-family: var(--mono);
-            font-size: 0.78rem;
-            color: var(--text-muted);
-            cursor: default;
-            transition: all 0.15s;
+            font-size: 0.77rem;
+            color: var(--text-secondary);
+            cursor: pointer;
             white-space: nowrap;
+            transition: all 0.14s;
         }
-        .ticker-pill:hover { background: rgba(255,255,255,0.08); color: var(--text); border-color: var(--border-bright); }
-        .ticker-pill .sym { color: var(--text); font-weight: 500; }
+        .tkr-pill:hover { background: rgba(255,255,255,0.09); color: #fff; border-color: rgba(255,255,255,0.2); }
+        .tkr-sym { color: #fff; font-weight: 500; }
 
-        /* ── Return signal bar ────────────────────────── */
-        .signal-bar-track {
-            background: rgba(255,255,255,0.05);
-            border-radius: 4px;
-            height: 8px;
-            width: 100%;
-            overflow: hidden;
-            position: relative;
+        /* ── Signal bar ────────────────────────────────── */
+        .bar-track {
+            background: rgba(255,255,255,0.06);
+            border-radius: 5px; height: 7px;
+            width: 100%; overflow: hidden;
         }
-        .signal-bar-fill-bull { background: linear-gradient(90deg, rgba(0,230,118,0.5), var(--bull)); }
-        .signal-bar-fill-bear { background: linear-gradient(90deg, rgba(255,59,92,0.5), var(--bear)); }
-        .signal-bar-fill-blue { background: linear-gradient(90deg, rgba(96,165,250,0.5), var(--capm-blue)); }
-        .signal-bar-fill-base { background: rgba(255,255,255,0.25); }
 
-        /* ── Metric chip ──────────────────────────────── */
+        /* ── Metric chip ───────────────────────────────── */
         .metric-chip {
             background: rgba(255,255,255,0.03);
-            border: 1px solid var(--border);
+            border: 1px solid rgba(255,255,255,0.08);
             border-radius: 10px;
-            padding: 14px 16px;
+            padding: 14px 15px;
         }
-        .metric-value { font-family: var(--mono); font-size: 1.25rem; font-weight: 500; }
+        .metric-val { font-family: var(--mono); font-size: 1.2rem; font-weight: 500; color: #fff; }
 
-        /* ── Separator ────────────────────────────────── */
-        .sep { border: none; border-top: 1px solid var(--border); margin: 0; }
+        /* ── Separator ─────────────────────────────────── */
+        .sep { border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 0; }
 
-        /* ── Info box ─────────────────────────────────── */
-        .info-box {
-            background: rgba(96,165,250,0.06);
-            border: 1px solid rgba(96,165,250,0.15);
-            border-radius: 10px;
-        }
-
-        /* ── Suggestion pill ──────────────────────────── */
+        /* ── Suggest pill ──────────────────────────────── */
         .suggest-pill {
-            background: rgba(167,139,250,0.08);
-            border: 1px solid rgba(167,139,250,0.25);
-            border-radius: 20px;
-            color: #c4b5fd;
-            font-family: var(--sans);
-            font-size: 0.78rem;
-            padding: 4px 12px;
-            cursor: pointer;
-            transition: all 0.15s;
+            background: rgba(192,132,252,0.08);
+            border: 1px solid rgba(192,132,252,0.22);
+            border-radius: 20px; color: var(--purple);
+            font-family: var(--sans); font-size: 0.76rem;
+            padding: 4px 12px; cursor: pointer;
+            transition: all 0.14s;
         }
         .suggest-pill:hover:not(:disabled) {
-            background: rgba(167,139,250,0.15);
-            border-color: rgba(167,139,250,0.5);
-            color: #ddd6fe;
+            background: rgba(192,132,252,0.16);
+            border-color: rgba(192,132,252,0.45); color: #e9d5ff;
         }
 
-        /* ── Scrollbar ────────────────────────────────── */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        /* ── Data row ──────────────────────────────────── */
+        .data-row {
+            display: flex; justify-content: space-between; align-items: baseline;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .data-row:last-child { border-bottom: none; }
+        .data-key { color: var(--text-secondary); font-size: 0.83rem; }
+        .data-val { font-family: var(--mono); font-size: 0.87rem; color: #fff; font-weight: 500; }
+
+        /* ── Info accordion ────────────────────────────── */
+        .acc-btn {
+            width: 100%; background: none; border: none; cursor: pointer;
+            padding: 13px 18px; display: flex; justify-content: space-between; align-items: center;
+            color: var(--text-secondary); font-family: var(--sans); font-size: 0.8rem;
+        }
+        .acc-btn:hover { color: var(--text-primary); }
+
+        /* ── Scrollbar ─────────────────────────────────── */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 
-        /* ── Accordion ────────────────────────────────── */
-        .accordion-content { overflow: hidden; transition: max-height 0.3s ease; }
-
-        /* ── Pulse dot ────────────────────────────────── */
-        @keyframes pulse-dot {
-            0%,100% { opacity: 1; transform: scale(1); }
-            50%      { opacity: 0.5; transform: scale(0.8); }
+        /* ── Header glow ───────────────────────────────── */
+        .header-title {
+            font-family: var(--sans); font-weight: 700;
+            font-size: clamp(1.6rem, 4vw, 2.3rem);
+            background: linear-gradient(135deg, #ffffff 0%, #c8d8f0 50%, #8faed8 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            letter-spacing: -0.025em; margin: 0 0 8px;
         }
-        .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
 
-        /* Responsive scrollable ticker row */
-        .ticker-scroll { display: flex; flex-wrap: wrap; gap: 6px; }
+        /* ── Warning box ───────────────────────────────── */
+        .warn-box {
+            background: rgba(255,196,69,0.07);
+            border: 1px solid rgba(255,196,69,0.2);
+            border-radius: 10px; padding: 12px 16px;
+            display: flex; gap: 10px; align-items: flex-start;
+        }
+        .err-box {
+            background: rgba(255,64,96,0.08);
+            border: 1px solid rgba(255,64,96,0.25);
+            border-radius: 10px; padding: 14px 18px;
+            display: flex; gap: 10px; align-items: flex-start;
+        }
     </style>
 </head>
 <body>
+
+<!-- Star canvas -->
+<canvas id="star-canvas"></canvas>
+<!-- Nebula overlay -->
+<div id="nebula"></div>
+
 <div id="root" style="position:relative;z-index:1;"></div>
 
+<!-- Star field animation — runs outside React, totally safe -->
+<script>
+(function() {
+    var canvas = document.getElementById('star-canvas');
+    var stars = [];
+    var animId;
+
+    function resize() {
+        canvas.width  = window.innerWidth;
+        canvas.height = window.innerHeight;
+        stars = [];
+        var count = Math.floor((canvas.width * canvas.height) / 5000);
+        count = Math.min(Math.max(count, 120), 280);
+        for (var i = 0; i < count; i++) {
+            var r = Math.random();
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                radius: r < 0.75 ? Math.random() * 0.6 + 0.2   // small: 0.2–0.8
+                       : r < 0.95 ? Math.random() * 0.8 + 0.8   // medium: 0.8–1.6
+                       :            Math.random() * 1.0 + 1.6,   // bright: 1.6–2.6
+                baseAlpha: r < 0.75 ? Math.random() * 0.35 + 0.2
+                          : r < 0.95 ? Math.random() * 0.45 + 0.35
+                          :            Math.random() * 0.3  + 0.65,
+                speed:  Math.random() * 0.008 + 0.003,
+                offset: Math.random() * Math.PI * 2,
+                glow: r > 0.95
+            });
+        }
+    }
+
+    function draw(time) {
+        var ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        var t = time * 0.001;
+        for (var i = 0; i < stars.length; i++) {
+            var s = stars[i];
+            var alpha = s.baseAlpha + Math.sin(t * s.speed * 6 + s.offset) * 0.18;
+            alpha = Math.max(0.05, Math.min(1, alpha));
+
+            ctx.save();
+            if (s.glow) {
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = 'rgba(200, 220, 255, 0.8)';
+            }
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(220, 235, 255, ' + alpha + ')';
+            ctx.fill();
+            ctx.restore();
+        }
+        animId = requestAnimationFrame(draw);
+    }
+
+    resize();
+    window.addEventListener('resize', resize);
+    animId = requestAnimationFrame(draw);
+})();
+</script>
+
 <script type="text/babel">
-    const { useState } = React;
+    const { useState, useEffect, useRef } = React;
 
     /* ── Icons ──────────────────────────────────────── */
-    const IconChart = () => (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    const IconTrend = () => (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
         </svg>
     );
     const IconInfo = () => (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
         </svg>
     );
     const IconWarn = () => (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
     );
-    const IconChevron = ({ open }) => (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+    const IconChev = ({ open }) => (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+            style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.22s' }}>
             <polyline points="6 9 12 15 18 9"/>
         </svg>
     );
-    const IconArrowUp = () => (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
-        </svg>
-    );
-    const IconArrowDown = () => (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
-        </svg>
-    );
 
-    /* ── Candlestick loader ─────────────────────────── */
+    /* ── Candle loader ──────────────────────────────── */
     const CandleLoader = () => (
-        <div style={{ display:'flex', alignItems:'flex-end', gap:'8px', height:'48px', justifyContent:'center' }}>
+        <div style={{ display:'flex', alignItems:'flex-end', gap:'7px', height:'44px', justifyContent:'center' }}>
             {[
-                { color:'#00e676', cls:'candle-a', h:'80%' },
-                { color:'#ff3b5c', cls:'candle-b', h:'100%' },
-                { color:'#00e676', cls:'candle-c', h:'60%' },
-                { color:'#ff3b5c', cls:'candle-a', h:'90%' },
-            ].map((c,i) => (
-                <div key={i} className={c.cls} style={{
-                    width:'10px', height:c.h, borderRadius:'3px',
-                    background:`linear-gradient(to top, ${c.color}66, ${c.color})`,
-                    boxShadow:`0 0 6px ${c.color}55`
+                { c:'#10f07a', cls:'ca', h:'80%' }, { c:'#ff4060', cls:'cb', h:'100%' },
+                { c:'#10f07a', cls:'cc', h:'60%' }, { c:'#ff4060', cls:'ca', h:'90%' },
+            ].map((s,i) => (
+                <div key={i} className={s.cls} style={{
+                    width:'9px', height:s.h, borderRadius:'3px',
+                    background:`linear-gradient(to top,${s.c}55,${s.c})`,
+                    boxShadow:`0 0 7px ${s.c}66`
                 }}/>
             ))}
         </div>
     );
 
-    /* ── Return signal row ──────────────────────────── */
-    const SignalBar = ({ label, value, capmValue, bullish, disabled, disabledMsg }) => {
-        if (disabled) {
-            return (
-                <div style={{ opacity: 0.45 }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
-                        <span style={{ fontSize:'0.82rem', color:'var(--text-muted)', fontFamily:'var(--sans)' }}>{label}</span>
-                        <span style={{ fontSize:'0.78rem', color:'var(--gold)', fontFamily:'var(--mono)' }}>—</span>
-                    </div>
-                    <div className="signal-bar-track">
-                        <div style={{ width:'0%', height:'100%' }}/>
-                    </div>
-                    {disabledMsg && <p style={{ fontSize:'0.72rem', color:'var(--gold)', marginTop:'4px', fontFamily:'var(--sans)' }}>⚠ {disabledMsg}</p>}
-                </div>
-            );
-        }
-        const max = Math.max(capmValue, value) * 1.15;
-        const capmPct = Math.min((capmValue / max) * 100, 100);
-        const valPct  = Math.min((value  / max) * 100, 100);
-        const color   = bullish ? 'var(--bull)' : 'var(--bear)';
+    /* ── Signal bar ─────────────────────────────────── */
+    const SignalBar = ({ label, value, capm, isPrimary, disabled, disabledMsg, formula }) => {
+        const bullish = !disabled && value > capm;
+        const color = bullish ? 'var(--bull)' : 'var(--bear)';
+        const max = disabled ? 1 : Math.max(capm, value) * 1.18;
+        const capmPct = disabled ? 0 : Math.min((capm / max) * 100, 100);
+        const valPct  = disabled ? 0 : Math.min((value / max) * 100, 100);
+
         return (
-            <div>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'6px' }}>
-                    <span style={{ fontSize:'0.82rem', color:'var(--text-muted)', fontFamily:'var(--sans)' }}>{label}</span>
-                    <span style={{ fontSize:'0.95rem', fontFamily:'var(--mono)', fontWeight:500, color }}>
-                        {(value * 100).toFixed(2)}%
-                        <span style={{ marginLeft:'6px', fontSize:'0.72rem' }}>
-                            {bullish ? '▲' : '▼'} {Math.abs((value - capmValue) * 100).toFixed(2)}%
-                        </span>
+            <div style={{ marginBottom:'18px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'7px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                        <span style={{ fontSize:'0.83rem', color: disabled ? 'var(--text-dim)' : 'var(--text-secondary)', fontWeight: isPrimary ? 600 : 400 }}>{label}</span>
+                        {isPrimary && !disabled && <span style={{ fontSize:'0.66rem', background:'rgba(16,240,122,0.12)', border:'1px solid rgba(16,240,122,0.3)', borderRadius:'10px', padding:'1px 7px', color:'var(--bull)', fontFamily:'var(--sans)' }}>PRIMARY</span>}
+                    </div>
+                    <span style={{ fontFamily:'var(--mono)', fontSize:'0.95rem', fontWeight:500, color: disabled ? 'var(--text-dim)' : color }}>
+                        {disabled ? '—' : (value*100).toFixed(2)+'%'}
+                        {!disabled && <span style={{ fontSize:'0.7rem', marginLeft:'5px', opacity:0.8 }}>
+                            {bullish ? '▲' : '▼'} {Math.abs((value-capm)*100).toFixed(2)}%
+                        </span>}
                     </span>
                 </div>
-                <div className="signal-bar-track">
-                    <div className={`bar-fill ${bullish ? 'signal-bar-fill-bull' : 'signal-bar-fill-bear'}`}
-                        style={{ '--target-w': valPct + '%', width: valPct + '%', height:'100%', borderRadius:'4px' }}/>
+                <div className="bar-track" style={{ position:'relative' }}>
+                    {/* CAPM baseline marker */}
+                    {!disabled && <div style={{ position:'absolute', left:capmPct+'%', top:'-3px', bottom:'-3px', width:'1.5px', background:'rgba(94,173,255,0.6)', zIndex:2 }}/>}
+                    {/* Value bar */}
+                    <div className={disabled ? '' : 'bar-animated'} style={{
+                        height:'100%', borderRadius:'5px', width: disabled ? '0%' : valPct+'%',
+                        background: disabled ? 'transparent' : `linear-gradient(90deg, ${color}55, ${color})`,
+                        boxShadow: disabled ? 'none' : `0 0 8px ${color}55`
+                    }}/>
                 </div>
+                {disabled && disabledMsg && (
+                    <p style={{ fontSize:'0.72rem', color:'var(--gold)', marginTop:'5px', fontFamily:'var(--sans)' }}>⚠ {disabledMsg}</p>
+                )}
+                {!disabled && formula && (
+                    <p style={{ fontSize:'0.72rem', color:'var(--text-dim)', marginTop:'4px', fontFamily:'var(--mono)' }}>{formula}</p>
+                )}
             </div>
         );
     };
+
+    /* ── CAPM bar (baseline) ────────────────────────── */
+    const CAPMBar = ({ value, formula }) => (
+        <div style={{ marginBottom:'18px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'7px' }}>
+                <span style={{ fontSize:'0.83rem', color:'var(--text-secondary)', fontWeight:600 }}>CAPM Required Return</span>
+                <span style={{ fontFamily:'var(--mono)', fontSize:'0.95rem', fontWeight:500, color:'var(--blue)' }}>{(value*100).toFixed(2)}%</span>
+            </div>
+            <div className="bar-track">
+                <div className="bar-animated" style={{ height:'100%', width:'100%', borderRadius:'5px', background:'linear-gradient(90deg, rgba(94,173,255,0.3), rgba(94,173,255,0.6))' }}/>
+            </div>
+            <p style={{ fontSize:'0.72rem', color:'var(--text-dim)', marginTop:'4px', fontFamily:'var(--mono)' }}>{formula}</p>
+        </div>
+    );
 
     /* ── Main component ─────────────────────────────── */
     function CAPMGordonCalculator() {
@@ -459,18 +519,17 @@
         const [error, setError] = useState('');
         const [overrideEnabled, setOverrideEnabled] = useState(false);
         const [manualGrowth, setManualGrowth] = useState('');
-        const [showAssumptions, setShowAssumptions] = useState(false);
         const [showFormulas, setShowFormulas] = useState(false);
+        const [showAssumptions, setShowAssumptions] = useState(false);
 
         const API_URL = window.location.hostname === 'localhost'
             ? 'http://localhost:5000'
             : (window.CONFIG?.BACKEND_URL || window.location.origin);
 
-        const formatCurrency = (amount, currency) => {
-            if (currency === 'VND') {
-                return new Intl.NumberFormat('en-US', { minimumFractionDigits:0, maximumFractionDigits:0 }).format(Math.round(amount)) + ' ₫';
-            }
-            return '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }).format(amount);
+        const fmt = (amount, currency) => {
+            if (currency === 'VND')
+                return new Intl.NumberFormat('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}).format(Math.round(amount)) + ' ₫';
+            return '$' + new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}).format(amount);
         };
 
         const calculateValuation = async (industryOverride = null) => {
@@ -483,28 +542,35 @@
                     if (!isNaN(g) && g >= 0 && g <= 0.20) params.append('growth_override', g.toFixed(4));
                 }
                 if (industryOverride) params.append('industry', industryOverride);
-                const response = await fetch(`${API_URL}/api/valuation/${ticker.toUpperCase()}?${params}`);
-                if (!response.ok) {
-                    const ed = await response.json().catch(() => ({}));
-                    throw new Error(ed.error || `API error: ${response.status}`);
-                }
-                const data = await response.json();
+                const res = await fetch(`${API_URL}/api/valuation/${ticker.toUpperCase()}?${params}`);
+                if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || `API ${res.status}`); }
+                const data = await res.json();
                 if (!data.ticker || !data.companyName) throw new Error('Invalid stock data received.');
                 setResult(data);
             } catch (err) {
                 let msg = err.message;
                 if (msg.includes('Failed to fetch') || msg.includes('NetworkError'))
-                    msg = 'Cannot connect to backend. Please ensure the Python backend is running.';
+                    msg = 'Cannot connect to backend. Ensure the Python backend is running.';
                 setError(msg);
             } finally { setLoading(false); }
         };
 
-        /* ── Derived signals ────────────────────────── */
-        const earningsYieldReturn = result && result.eps > 0
-            ? (result.eps / result.currentPrice) + result.dividendGrowth
+        /* ── Derived: Earnings Yield + Industry EPS Growth ──
+         * Use raw Damodaran industry EPS growth (the analyst estimate,
+         * NOT the GDP-weighted perpetuity g used in Gordon DDM).
+         * Falls back to dividendGrowth when no industry data.
+         */
+        const industryEpsGrowthRaw = (result?.growthDetails?.method === 'industry' &&
+                                      result?.growthDetails?.industryEpsGrowth != null)
+            ? result.growthDetails.industryEpsGrowth / 100   // convert % → decimal
             : null;
-        const hasGordon    = result && result.dividend > 0;
-        const hasEarnings  = earningsYieldReturn !== null;
+
+        const earningsGrowthRate = industryEpsGrowthRaw ?? result?.dividendGrowth ?? 0;
+        const earningsYield      = result?.eps > 0 ? result.eps / result.currentPrice : null;
+        const earningsYieldReturn = earningsYield != null ? earningsYield + earningsGrowthRate : null;
+
+        const hasGordon   = result && result.dividend > 0;
+        const hasEarnings = earningsYieldReturn != null;
 
         const primaryValuation = result
             ? (hasGordon
@@ -516,146 +582,128 @@
 
         /* ── Recommended tickers ────────────────────── */
         const RECS = {
-            VN: [['VNM','Vinamilk'],['VCB','Vietcombank'],['FPT','FPT Corp'],['HPG','Hoa Phat'],['SAB','Sabeco'],
-                 ['GAS','PVGas'],['TCB','Techcombank'],['MBB','Military Bank'],['BVH','Bao Viet'],['PLX','Petrolimex'],['VHM','Vinhomes'],['MSN','Masan']],
-            US: [['JNJ','J&J'],['PG','Procter & Gamble'],['KO','Coca-Cola'],['PEP','PepsiCo'],['XOM','ExxonMobil'],
+            VN: [['VNM','Vinamilk'],['VCB','Vietcombank'],['FPT','FPT Corp'],['HPG','Hoa Phat'],
+                 ['SAB','Sabeco'],['GAS','PVGas'],['TCB','Techcombank'],['MBB','Military Bank'],
+                 ['BVH','Bao Viet'],['PLX','Petrolimex'],['VHM','Vinhomes'],['MSN','Masan']],
+            US: [['JNJ','J&J'],['PG','P&G'],['KO','Coca-Cola'],['PEP','PepsiCo'],['XOM','ExxonMobil'],
                  ['VZ','Verizon'],['T','AT&T'],['MCD','McDonald\'s'],['MMM','3M'],['KMB','Kimberly-Clark']],
             AU: [['CBA','CommBank'],['NAB','NAB'],['WBC','Westpac'],['ANZ','ANZ'],['BHP','BHP'],
-                 ['RIO','Rio Tinto'],['WES','Wesfarmers'],['WOW','Woolworths'],['TLS','Telstra'],['CSL','CSL']]
+                 ['RIO','Rio Tinto'],['WES','Wesfarmers'],['WOW','Woolworths'],['TLS','Telstra'],['CSL','CSL']],
         };
 
+        const isBull = primaryValuation === 'UNDERVALUED';
+
         return (
-            <div style={{ minHeight:'100vh', padding:'16px 12px 40px', maxWidth:'860px', margin:'0 auto' }}>
+            <div id="app">
 
                 {/* ── HEADER ── */}
-                <div style={{ padding:'32px 0 20px', textAlign:'center' }}>
-                    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', marginBottom:'10px' }}>
-                        <div style={{ color:'var(--capm-blue)', display:'flex' }}><IconChart/></div>
-                        <span style={{ fontFamily:'var(--mono)', fontSize:'0.78rem', letterSpacing:'0.2em', color:'var(--text-muted)', textTransform:'uppercase' }}>
+                <div style={{ textAlign:'center', padding:'36px 0 22px' }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', marginBottom:'12px', color:'var(--blue)' }}>
+                        <IconTrend/>
+                        <span style={{ fontFamily:'var(--mono)', fontSize:'0.72rem', letterSpacing:'0.2em', color:'var(--text-secondary)', textTransform:'uppercase' }}>
                             Quantitative Valuation Terminal
                         </span>
                     </div>
-                    <h1 style={{ fontFamily:'var(--sans)', fontWeight:700, fontSize:'clamp(1.5rem,4vw,2.2rem)', margin:'0 0 8px', background:'linear-gradient(135deg,#e2e8f0 30%,#94a3b8)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', letterSpacing:'-0.02em' }}>
-                        CAPM &amp; Gordon Model
-                    </h1>
-                    <p style={{ color:'var(--text-muted)', fontSize:'0.88rem', margin:0 }}>
-                        Multi-signal stock valuation — CAPM · Dividend Discount · Earnings Yield
+                    <h1 className="header-title">CAPM &amp; Gordon Model</h1>
+                    <p style={{ color:'var(--text-secondary)', fontSize:'0.87rem', margin:0, lineHeight:1.6 }}>
+                        CAPM &nbsp;·&nbsp; Dividend Discount &nbsp;·&nbsp; Earnings Yield
                     </p>
                 </div>
 
-                {/* ── FORMULAS ACCORDION ── */}
-                <div className="card" style={{ marginBottom:'12px', overflow:'hidden' }}>
-                    <button onClick={() => setShowFormulas(v => !v)}
-                        style={{ width:'100%', background:'none', border:'none', cursor:'pointer', padding:'12px 16px', display:'flex', justifyContent:'space-between', alignItems:'center', color:'var(--text-muted)' }}>
-                        <span style={{ fontSize:'0.82rem', fontFamily:'var(--sans)', display:'flex', alignItems:'center', gap:'6px' }}>
-                            <IconInfo/> How these models work
-                        </span>
-                        <IconChevron open={showFormulas}/>
+                {/* ── FORMULA INFO ── */}
+                <div className="card" style={{ marginBottom:'10px' }}>
+                    <button className="acc-btn" onClick={() => setShowFormulas(v => !v)}>
+                        <span style={{ display:'flex', alignItems:'center', gap:'6px' }}><IconInfo/> How these signals work</span>
+                        <IconChev open={showFormulas}/>
                     </button>
                     {showFormulas && (
-                        <div style={{ padding:'0 16px 16px', fontSize:'0.82rem', color:'var(--text-muted)', lineHeight:1.7 }}>
-                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'12px' }}>
-                                <div style={{ background:'rgba(96,165,250,0.06)', border:'1px solid rgba(96,165,250,0.15)', borderRadius:'8px', padding:'12px' }}>
-                                    <div style={{ color:'var(--capm-blue)', fontWeight:600, marginBottom:'4px', fontFamily:'var(--mono)', fontSize:'0.78rem' }}>CAPM — Required Return</div>
-                                    <div style={{ fontFamily:'var(--mono)', fontSize:'0.8rem', color:'var(--text)' }}>E(R) = Rf + β(Rm − Rf)</div>
-                                    <div style={{ marginTop:'6px', fontSize:'0.75rem' }}>Risk-adjusted hurdle rate. Sets the bar every other signal must clear.</div>
+                        <div style={{ padding:'0 18px 18px', display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))', gap:'10px' }}>
+                            {[
+                                { title:'CAPM — Hurdle Rate', color:'var(--blue)', formula:'E(R) = Rf + β(Rm − Rf)', desc:'Risk-adjusted required return. Every signal must clear this bar.' },
+                                { title:'Gordon DDM', color:'var(--bull)', formula:'E(R) = (D₁/P₀) + g', desc:'Uses perpetuity growth (g). Needs consistent dividends. Gordon > CAPM → undervalued.' },
+                                { title:'Earnings Yield + g', color:'var(--gold)', formula:'E(R) = (EPS/P₀) + g_industry', desc:'Uses raw Damodaran industry EPS growth (analyst 5yr). Wider coverage — works without dividends.' },
+                            ].map(f => (
+                                <div key={f.title} style={{ background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'10px', padding:'12px' }}>
+                                    <div style={{ color:f.color, fontWeight:600, fontSize:'0.78rem', marginBottom:'5px', fontFamily:'var(--mono)' }}>{f.title}</div>
+                                    <div style={{ fontFamily:'var(--mono)', fontSize:'0.8rem', color:'#fff', marginBottom:'5px' }}>{f.formula}</div>
+                                    <div style={{ fontSize:'0.75rem', color:'var(--text-secondary)', lineHeight:1.55 }}>{f.desc}</div>
                                 </div>
-                                <div style={{ background:'rgba(0,230,118,0.05)', border:'1px solid rgba(0,230,118,0.12)', borderRadius:'8px', padding:'12px' }}>
-                                    <div style={{ color:'var(--bull)', fontWeight:600, marginBottom:'4px', fontFamily:'var(--mono)', fontSize:'0.78rem' }}>Gordon DDM — Dividend Return</div>
-                                    <div style={{ fontFamily:'var(--mono)', fontSize:'0.8rem', color:'var(--text)' }}>E(R) = (D₁/P₀) + g</div>
-                                    <div style={{ marginTop:'6px', fontSize:'0.75rem' }}>Expected return from dividends. Gordon {'>'} CAPM → undervalued.</div>
-                                </div>
-                                <div style={{ background:'rgba(251,191,36,0.05)', border:'1px solid rgba(251,191,36,0.12)', borderRadius:'8px', padding:'12px' }}>
-                                    <div style={{ color:'var(--gold)', fontWeight:600, marginBottom:'4px', fontFamily:'var(--mono)', fontSize:'0.78rem' }}>Earnings Yield + g</div>
-                                    <div style={{ fontFamily:'var(--mono)', fontSize:'0.8rem', color:'var(--text)' }}>E(R) = (EPS/P₀) + g</div>
-                                    <div style={{ marginTop:'6px', fontSize:'0.75rem' }}>Broader signal — works even without dividends. Primary when div = 0.</div>
-                                </div>
-                            </div>
-                            <p style={{ marginTop:'10px', fontSize:'0.75rem', fontStyle:'italic' }}>
-                                ⚠ Gordon Model requires consistent dividends. Best for mature, dividend-paying companies.
+                            ))}
+                            <p style={{ gridColumn:'1/-1', fontSize:'0.73rem', color:'var(--text-secondary)', fontStyle:'italic', margin:0 }}>
+                                ⚠ Gordon Model requires consistent dividend payments. Best for mature income-paying companies.<br/>
+                                Earnings Yield uses <strong style={{color:'#fff'}}>industry EPS growth</strong> (separate from the perpetuity g used in Gordon DDM).
                             </p>
                         </div>
                     )}
                 </div>
 
-                {/* ── MARKET SELECTOR ── */}
-                <div className="card" style={{ padding:'16px', marginBottom:'12px' }}>
-                    <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'10px' }}>
-                        Select Market
-                    </div>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px' }}>
+                {/* ── MARKET + WATCHLIST ── */}
+                <div className="card" style={{ padding:'16px', marginBottom:'10px' }}>
+                    <div className="section-label" style={{ marginBottom:'10px' }}>Select Market</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px', marginBottom:'14px' }}>
                         {[
-                            { key:'VN', label:'Vietnam', labelSm:'VN', flag:'https://images.emojiterra.com/twitter/v14.0/1024px/1f1fb-1f1f3.png', active:'active-vn' },
-                            { key:'US', label:'United States', labelSm:'US', flag:'https://images.emojiterra.com/twitter/v13.1/512px/1f1fa-1f1f8.png', active:'active-us' },
-                            { key:'AU', label:'Australia', labelSm:'AU', flag:'https://images.emojiterra.com/twitter/v14.0/1024px/1f1e6-1f1fa.png', active:'active-au' },
+                            { k:'VN', label:'Vietnam',      sm:'VN', flag:'https://images.emojiterra.com/twitter/v14.0/1024px/1f1fb-1f1f3.png', cls:'mkt-vn' },
+                            { k:'US', label:'United States', sm:'US', flag:'https://images.emojiterra.com/twitter/v13.1/512px/1f1fa-1f1f8.png', cls:'mkt-us' },
+                            { k:'AU', label:'Australia',    sm:'AU', flag:'https://images.emojiterra.com/twitter/v14.0/1024px/1f1e6-1f1fa.png', cls:'mkt-au' },
                         ].map(m => (
-                            <button key={m.key} onClick={() => setMarket(m.key)} disabled={loading}
-                                className={`market-btn ${market === m.key ? m.active : ''}`}>
-                                <img src={m.flag} alt={m.label} style={{ width:'22px', height:'22px', borderRadius:'3px', objectFit:'cover' }}/>
+                            <button key={m.k} onClick={() => setMarket(m.k)} disabled={loading}
+                                className={`market-btn ${market === m.k ? m.cls : ''}`}>
+                                <img src={m.flag} alt={m.label} style={{ width:'20px', height:'20px', borderRadius:'3px', objectFit:'cover' }}/>
                                 <span className="hidden sm:inline">{m.label}</span>
-                                <span className="sm:hidden">{m.labelSm}</span>
+                                <span className="sm:hidden">{m.sm}</span>
                             </button>
                         ))}
                     </div>
-
-                    {/* Recommended tickers */}
-                    <div style={{ marginTop:'12px' }}>
-                        <div style={{ fontSize:'0.72rem', color:'var(--text-faint)', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'7px' }}>
-                            Popular {market === 'VN' ? 'Vietnamese' : market === 'AU' ? 'Australian' : 'US'} dividend stocks
-                        </div>
-                        <div className="ticker-scroll">
-                            {(RECS[market] || []).map(([sym, name]) => (
-                                <button key={sym} className="ticker-pill"
-                                    onClick={() => { setTicker(sym); setTimeout(() => calculateValuation(), 0); }}
-                                    title={name}>
-                                    <span className="sym">{sym}</span>
-                                    <span style={{ color:'var(--text-faint)', marginLeft:'4px' }}>{name}</span>
-                                </button>
-                            ))}
-                        </div>
-                        {market === 'AU' && <p style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'5px', fontStyle:'italic' }}>Franking credits apply — unique tax benefit for Australian dividends</p>}
-                        {market === 'US' && <p style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'5px', fontStyle:'italic' }}>Dividend Aristocrats — 25+ years of consecutive dividend increases</p>}
+                    <div className="section-label" style={{ marginBottom:'7px' }}>
+                        Popular {market==='VN'?'Vietnamese':market==='AU'?'Australian':'US'} dividend stocks
                     </div>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
+                        {(RECS[market]||[]).map(([sym,name]) => (
+                            <button key={sym} className="tkr-pill" title={name}
+                                onClick={() => { setTicker(sym); setTimeout(() => calculateValuation(), 0); }}>
+                                <span className="tkr-sym">{sym}</span>
+                                <span style={{ color:'var(--text-dim)', marginLeft:'4px' }}>{name}</span>
+                            </button>
+                        ))}
+                    </div>
+                    {market==='AU' && <p style={{fontSize:'0.71rem',color:'var(--text-secondary)',marginTop:'6px',fontStyle:'italic'}}>Franking credits apply — unique tax benefit for Australian dividends</p>}
+                    {market==='US' && <p style={{fontSize:'0.71rem',color:'var(--text-secondary)',marginTop:'6px',fontStyle:'italic'}}>Dividend Aristocrats — 25+ years of consecutive increases</p>}
                 </div>
 
-                {/* ── SEARCH INPUT ── */}
+                {/* ── SEARCH ── */}
                 <div className="card" style={{ padding:'16px', marginBottom:'20px' }}>
-                    {/* Override bar */}
                     {overrideEnabled && (
-                        <div style={{ display:'flex', alignItems:'center', gap:'10px', background:'rgba(251,191,36,0.05)', border:'1px solid rgba(251,191,36,0.2)', borderRadius:'8px', padding:'8px 12px', marginBottom:'12px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'10px', background:'rgba(255,196,69,0.05)', border:'1px solid rgba(255,196,69,0.18)', borderRadius:'9px', padding:'8px 12px', marginBottom:'12px' }}>
                             <span style={{ fontSize:'0.82rem', color:'var(--gold)', fontFamily:'var(--mono)', whiteSpace:'nowrap' }}>Override g =</span>
-                            <input type="number" value={manualGrowth} onChange={e => setManualGrowth(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && calculateValuation()}
+                            <input type="number" value={manualGrowth} onChange={e=>setManualGrowth(e.target.value)}
+                                onKeyDown={e=>e.key==='Enter'&&calculateValuation()}
                                 className="override-input" placeholder="3.5" min="0" max="20" step="0.1" disabled={loading}/>
-                            <span style={{ color:'var(--gold)', fontSize:'0.82rem', fontFamily:'var(--mono)' }}>%</span>
-                            <button onClick={() => { setOverrideEnabled(false); setManualGrowth(''); }}
-                                style={{ marginLeft:'auto', background:'none', border:'1px solid rgba(251,191,36,0.25)', borderRadius:'6px', color:'var(--gold)', fontSize:'0.75rem', padding:'3px 10px', cursor:'pointer', opacity:0.8 }}>
+                            <span style={{color:'var(--gold)',fontSize:'0.82rem',fontFamily:'var(--mono)'}}>%</span>
+                            <button onClick={()=>{setOverrideEnabled(false);setManualGrowth('');}}
+                                style={{marginLeft:'auto',background:'none',border:'1px solid rgba(255,196,69,0.22)',borderRadius:'6px',color:'var(--gold)',fontSize:'0.74rem',padding:'3px 10px',cursor:'pointer'}}>
                                 Cancel
                             </button>
                         </div>
                     )}
-
-                    <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'8px' }}>
-                        Stock Ticker Symbol
-                    </div>
+                    <div className="section-label" style={{ marginBottom:'8px' }}>Stock Ticker Symbol</div>
                     <div style={{ display:'flex', gap:'8px' }}>
                         <input type="text" value={ticker}
-                            onChange={e => setTicker(e.target.value.toUpperCase())}
-                            onKeyDown={e => e.key === 'Enter' && calculateValuation()}
-                            className="terminal-input"
-                            placeholder={market === 'VN' ? 'VNM, VCB, FPT …' : market === 'AU' ? 'CBA, BHP, CSL …' : 'AAPL, MSFT, GOOGL …'}
-                            disabled={loading} style={{ flex:1 }}/>
-                        <button onClick={() => calculateValuation()} disabled={loading} className="btn-analyze">
+                            onChange={e=>setTicker(e.target.value.toUpperCase())}
+                            onKeyDown={e=>e.key==='Enter'&&calculateValuation()}
+                            className="ticker-input" disabled={loading}
+                            placeholder={market==='VN'?'VNM, VCB, FPT …':market==='AU'?'CBA, BHP, CSL …':'AAPL, MSFT, GOOGL …'}
+                            style={{flex:1}}/>
+                        <button onClick={()=>calculateValuation()} disabled={loading} className="btn-analyze">
                             {loading ? 'Analyzing…' : 'Analyze ↵'}
                         </button>
                     </div>
                 </div>
 
-                {/* ── LOADING ── */}
+                {/* ── LOADER ── */}
                 {loading && (
-                    <div style={{ textAlign:'center', padding:'40px 20px' }}>
+                    <div style={{ textAlign:'center', padding:'44px 20px' }}>
                         <CandleLoader/>
-                        <p style={{ color:'var(--text-muted)', fontFamily:'var(--mono)', fontSize:'0.85rem', marginTop:'16px', letterSpacing:'0.05em' }}>
+                        <p style={{ color:'var(--text-secondary)', fontFamily:'var(--mono)', fontSize:'0.82rem', marginTop:'14px', letterSpacing:'0.04em' }}>
                             Fetching market data…
                         </p>
                     </div>
@@ -663,163 +711,150 @@
 
                 {/* ── ERROR ── */}
                 {error && !loading && (
-                    <div style={{ background:'rgba(255,59,92,0.08)', border:'1px solid rgba(255,59,92,0.25)', borderRadius:'10px', padding:'14px 18px', marginBottom:'16px', display:'flex', gap:'10px', alignItems:'flex-start' }}>
+                    <div className="err-box" style={{ marginBottom:'14px' }}>
                         <div style={{ color:'var(--bear)', flexShrink:0, marginTop:'1px' }}><IconWarn/></div>
-                        <p style={{ color:'#fca5a5', fontSize:'0.88rem', margin:0 }}>{error}</p>
+                        <p style={{ color:'#ffb3bf', fontSize:'0.87rem', margin:0 }}>{error}</p>
                     </div>
                 )}
 
-                {/* ══ RESULTS ══════════════════════════════════ */}
+                {/* ══════ RESULTS ══════════════════════════════ */}
                 {result && !loading && (() => {
-                    const isBull = primaryValuation === 'UNDERVALUED';
-                    const accentColor = isBull ? 'var(--bull)' : 'var(--bear)';
-                    const gordonBull  = hasGordon && result.gordonReturn > result.capmReturn;
-                    const earnBull    = hasEarnings && earningsYieldReturn > result.capmReturn;
+                    const gordonBull  = hasGordon   && result.gordonReturn   > result.capmReturn;
+                    const earnBull    = hasEarnings  && earningsYieldReturn   > result.capmReturn;
 
                     return (
-                        <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                        <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
 
-                            {/* ── VERDICT BANNER ── */}
-                            <div className={`verdict-banner animate-fade-up ${isBull ? 'verdict-bull' : 'verdict-bear'}`}>
-                                {/* Decorative candle on right */}
-                                <div style={{ position:'absolute', right:'24px', top:'50%', transform:'translateY(-50%)', opacity:0.08, pointerEvents:'none' }}>
-                                    <svg width="60" height="80" viewBox="0 0 60 80">
-                                        <rect x="22" y="10" width="16" height="60" rx="2" fill={accentColor}/>
-                                        <line x1="30" y1="0" x2="30" y2="10" stroke={accentColor} strokeWidth="3"/>
-                                        <line x1="30" y1="70" x2="30" y2="80" stroke={accentColor} strokeWidth="3"/>
+                            {/* ── VERDICT ── */}
+                            <div className={`verdict a0 ${isBull ? 'verdict-bull' : 'verdict-bear'}`}>
+                                {/* bg candle decoration */}
+                                <div style={{ position:'absolute', right:'20px', top:'50%', transform:'translateY(-50%)', opacity:0.07, pointerEvents:'none' }}>
+                                    <svg width="56" height="76" viewBox="0 0 56 76">
+                                        <rect x="20" y="8" width="16" height="58" rx="2" fill={isBull?'var(--bull)':'var(--bear)'}/>
+                                        <line x1="28" y1="0" x2="28" y2="8" stroke={isBull?'var(--bull)':'var(--bear)'} strokeWidth="3"/>
+                                        <line x1="28" y1="66" x2="28" y2="76" stroke={isBull?'var(--bull)':'var(--bear)'} strokeWidth="3"/>
                                     </svg>
                                 </div>
-
-                                <div style={{ fontSize:'0.8rem', color:'rgba(255,255,255,0.5)', fontFamily:'var(--mono)', letterSpacing:'0.05em', marginBottom:'6px' }}>
+                                <div style={{ fontFamily:'var(--mono)', fontSize:'0.75rem', color:'rgba(255,255,255,0.45)', marginBottom:'6px', letterSpacing:'0.04em' }}>
                                     {result.ticker} · {result.companyName}
                                 </div>
-                                <div style={{ display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
-                                    <span className={`verdict-label-${isBull ? 'bull' : 'bear'}`}
-                                        style={{ fontFamily:'var(--sans)', fontWeight:700, fontSize:'clamp(1.8rem,5vw,2.6rem)', letterSpacing:'-0.02em' }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap', marginBottom:'12px' }}>
+                                    <span className={`${isBull?'text-bull glow-bull':'text-bear glow-bear'}`}
+                                        style={{ fontFamily:'var(--sans)', fontWeight:700, fontSize:'clamp(1.9rem,5vw,2.7rem)', letterSpacing:'-0.02em', lineHeight:1 }}>
                                         {isBull ? '▲' : '▼'} {primaryValuation}
                                     </span>
                                     <div>
-                                        <div style={{ color:'rgba(255,255,255,0.75)', fontSize:'0.88rem', fontWeight:500 }}>
-                                            {isBull ? 'Expected to RISE — price below fair value' : 'Expected to FALL — price above fair value'}
+                                        <div style={{ color:'rgba(255,255,255,0.82)', fontSize:'0.9rem', fontWeight:500 }}>
+                                            {isBull ? 'Price below fair value — expected to RISE' : 'Price above fair value — expected to FALL'}
                                         </div>
                                         {!hasGordon && hasEarnings && (
-                                            <div style={{ color:'var(--gold)', fontSize:'0.75rem', marginTop:'2px' }}>
-                                                Gordon Model disabled — no dividend. Earnings yield is primary signal.
+                                            <div style={{ color:'var(--gold)', fontSize:'0.74rem', marginTop:'3px' }}>
+                                                Gordon Model disabled (no dividend) — Earnings Yield is primary signal
                                             </div>
                                         )}
                                     </div>
                                 </div>
-
-                                {/* Price diff pill */}
-                                <div style={{ marginTop:'12px', display:'flex', gap:'10px', flexWrap:'wrap' }}>
-                                    <span style={{ background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'20px', padding:'4px 14px', fontFamily:'var(--mono)', fontSize:'0.82rem', color:'rgba(255,255,255,0.7)' }}>
-                                        Price {formatCurrency(result.currentPrice, result.currency)} → Fair {formatCurrency(result.fairPrice, result.currency)}
+                                <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                                    <span style={{ background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:'20px', padding:'4px 14px', fontFamily:'var(--mono)', fontSize:'0.8rem', color:'rgba(255,255,255,0.7)' }}>
+                                        {fmt(result.currentPrice, result.currency)} → {fmt(result.fairPrice, result.currency)}
                                     </span>
-                                    <span style={{ background: result.priceDifference > 0 ? 'rgba(0,230,118,0.15)' : 'rgba(255,59,92,0.15)', border:`1px solid ${result.priceDifference>0?'rgba(0,230,118,0.3)':'rgba(255,59,92,0.3)'}`, borderRadius:'20px', padding:'4px 14px', fontFamily:'var(--mono)', fontSize:'0.82rem', color: result.priceDifference>0 ? 'var(--bull)' : 'var(--bear)' }}>
-                                        {result.priceDifference > 0 ? '+' : ''}{result.priceDifference.toFixed(2)}% upside
+                                    <span style={{ background: result.priceDifference>0?'rgba(16,240,122,0.12)':'rgba(255,64,96,0.12)', border:`1px solid ${result.priceDifference>0?'rgba(16,240,122,0.28)':'rgba(255,64,96,0.28)'}`, borderRadius:'20px', padding:'4px 14px', fontFamily:'var(--mono)', fontSize:'0.8rem', color: result.priceDifference>0?'var(--bull)':'var(--bear)' }}>
+                                        {result.priceDifference>0?'+':''}{result.priceDifference.toFixed(2)}%
                                     </span>
                                 </div>
                             </div>
 
                             {/* ── WARNINGS ── */}
                             {result.lowDividendWarning && (
-                                <div className="animate-fade-up-delay-1" style={{ background:'rgba(251,191,36,0.07)', border:'1px solid rgba(251,191,36,0.2)', borderRadius:'10px', padding:'12px 16px', display:'flex', gap:'10px', alignItems:'flex-start' }}>
-                                    <div style={{ color:'var(--gold)', flexShrink:0, marginTop:'1px' }}><IconWarn/></div>
-                                    <p style={{ color:'var(--gold)', fontSize:'0.85rem', margin:0, fontFamily:'var(--sans)' }}>{result.lowDividendWarning}</p>
+                                <div className="warn-box a1">
+                                    <div style={{color:'var(--gold)',flexShrink:0,marginTop:'1px'}}><IconWarn/></div>
+                                    <p style={{color:'var(--gold)',fontSize:'0.85rem',margin:0,lineHeight:1.5}}>{result.lowDividendWarning}</p>
                                 </div>
                             )}
                             {result.growthWarning && (
-                                <div style={{ background:'rgba(251,191,36,0.06)', border:'1px solid rgba(251,191,36,0.18)', borderRadius:'10px', padding:'10px 16px', display:'flex', gap:'10px', alignItems:'center' }}>
-                                    <div style={{ color:'var(--gold)', flexShrink:0 }}><IconWarn/></div>
-                                    <p style={{ color:'rgba(251,191,36,0.85)', fontSize:'0.82rem', margin:0 }}>{result.growthWarning}</p>
+                                <div className="warn-box" style={{padding:'10px 14px'}}>
+                                    <div style={{color:'var(--gold)',flexShrink:0}}><IconWarn/></div>
+                                    <p style={{color:'rgba(255,196,69,0.85)',fontSize:'0.81rem',margin:0}}>{result.growthWarning}</p>
                                 </div>
                             )}
 
-                            {/* ── RETURN SIGNALS PANEL ── */}
-                            <div className="card animate-fade-up-delay-1" style={{ padding:'20px 22px' }}>
-                                <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.12em', marginBottom:'16px' }}>
-                                    Return Signal Comparison
-                                </div>
+                            {/* ── RETURN SIGNALS ── */}
+                            <div className="card a1" style={{ padding:'20px 22px' }}>
+                                <div className="section-label" style={{ marginBottom:'18px' }}>Return Signal Comparison</div>
 
-                                {/* CAPM baseline bar */}
-                                <div style={{ marginBottom:'14px' }}>
-                                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'6px' }}>
-                                        <span style={{ fontSize:'0.82rem', color:'var(--text-muted)', fontFamily:'var(--sans)' }}>CAPM Required Return (hurdle)</span>
-                                        <span style={{ fontFamily:'var(--mono)', fontSize:'0.95rem', fontWeight:500, color:'var(--capm-blue)' }}>{(result.capmReturn*100).toFixed(2)}%</span>
-                                    </div>
-                                    <div className="signal-bar-track">
-                                        <div className="signal-bar-fill-base bar-fill" style={{ '--target-w':'100%', width:'100%', height:'100%', borderRadius:'4px', opacity:0.4 }}/>
-                                    </div>
-                                    <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'4px' }}>
-                                        {(result.riskFreeRate*100).toFixed(2)}% + {result.beta.toFixed(3)}β × ({(result.marketReturn*100).toFixed(2)}% − {(result.riskFreeRate*100).toFixed(2)}%)
-                                    </div>
-                                </div>
-                                <hr className="sep" style={{ marginBottom:'14px' }}/>
+                                <CAPMBar
+                                    value={result.capmReturn}
+                                    formula={`${(result.riskFreeRate*100).toFixed(2)}% + ${result.beta.toFixed(3)}β × (${(result.marketReturn*100).toFixed(2)}% − ${(result.riskFreeRate*100).toFixed(2)}%)`}
+                                />
+                                <hr className="sep" style={{ marginBottom:'18px' }}/>
 
-                                {/* Gordon signal */}
-                                <div style={{ marginBottom:'14px' }}>
-                                    <SignalBar
-                                        label="Gordon DDM Expected Return"
-                                        value={result.gordonReturn}
-                                        capmValue={result.capmReturn}
-                                        bullish={gordonBull}
-                                        disabled={!hasGordon}
-                                        disabledMsg={!hasGordon ? 'No dividend paid — Gordon Model not applicable' : null}
-                                    />
-                                    {hasGordon && (
-                                        <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'4px' }}>
-                                            ({formatCurrency(result.dividendD1, result.currency)}/{formatCurrency(result.currentPrice, result.currency)}) + {(result.dividendGrowth*100).toFixed(2)}% g
-                                        </div>
-                                    )}
-                                </div>
+                                <SignalBar
+                                    label="Gordon Dividend Discount Model"
+                                    value={hasGordon ? result.gordonReturn : 0}
+                                    capm={result.capmReturn}
+                                    isPrimary={hasGordon}
+                                    disabled={!hasGordon}
+                                    disabledMsg="No dividend paid — Gordon Model not applicable"
+                                    formula={hasGordon ? `(${fmt(result.dividendD1,result.currency)}/${fmt(result.currentPrice,result.currency)}) + ${(result.dividendGrowth*100).toFixed(2)}% g(perpetuity)` : null}
+                                />
 
-                                {/* Earnings yield signal */}
-                                <div>
-                                    <SignalBar
-                                        label={`Earnings Yield + g${!hasGordon ? ' ★ PRIMARY' : ''}`}
-                                        value={earningsYieldReturn}
-                                        capmValue={result.capmReturn}
-                                        bullish={earnBull}
-                                        disabled={!hasEarnings}
-                                        disabledMsg={!hasEarnings ? 'Earnings Yield unavailable — company is loss-making' : null}
-                                    />
-                                    {hasEarnings && (
-                                        <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'4px' }}>
-                                            ({formatCurrency(result.eps, result.currency)} EPS / {formatCurrency(result.currentPrice, result.currency)}) + {(result.dividendGrowth*100).toFixed(2)}% g = {(earningsYieldReturn*100).toFixed(2)}%
-                                        </div>
-                                    )}
+                                <SignalBar
+                                    label={`Earnings Yield + Industry EPS Growth${!hasGordon?' ★':''}`}
+                                    value={hasEarnings ? earningsYieldReturn : 0}
+                                    capm={result.capmReturn}
+                                    isPrimary={!hasGordon && hasEarnings}
+                                    disabled={!hasEarnings}
+                                    disabledMsg={!hasEarnings ? 'EPS ≤ 0 — Earnings Yield unavailable (loss-making company)' : null}
+                                    formula={hasEarnings
+                                        ? `(${fmt(result.eps,result.currency)} EPS / ${fmt(result.currentPrice,result.currency)}) + ${(earningsGrowthRate*100).toFixed(2)}% ${industryEpsGrowthRaw!=null?'industry EPS growth':'g fallback'}`
+                                        : null}
+                                />
+
+                                {/* Growth rate note */}
+                                <div style={{ background:'rgba(255,255,255,0.025)', borderRadius:'8px', padding:'10px 14px', marginTop:'4px' }}>
+                                    <p style={{ fontSize:'0.75rem', color:'var(--text-secondary)', margin:0, lineHeight:1.6 }}>
+                                        <span style={{color:'#fff',fontWeight:600}}>Growth rate distinction:</span>{' '}
+                                        <span style={{fontFamily:'var(--mono)',color:'var(--purple)'}}>{(result.dividendGrowth*100).toFixed(2)}% g (perpetuity)</span>
+                                        {' '}is used in Gordon DDM.{' '}
+                                        {industryEpsGrowthRaw != null
+                                            ? <><span style={{fontFamily:'var(--mono)',color:'var(--gold)'}}>{(industryEpsGrowthRaw*100).toFixed(2)}% industry EPS growth</span>{' '}(Damodaran 5yr analyst estimate) is used in Earnings Yield.</>
+                                            : <span style={{color:'var(--text-secondary)'}}>No industry EPS data — Earnings Yield uses same g as Gordon.</span>
+                                        }
+                                    </p>
                                 </div>
                             </div>
 
                             {/* ── KEY METRICS ── */}
-                            <div className="card animate-fade-up-delay-2" style={{ padding:'20px 22px' }}>
-                                <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.12em', marginBottom:'14px' }}>
-                                    Key Metrics
-                                </div>
-                                <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'10px' }}>
+                            <div className="card a2" style={{ padding:'20px 22px' }}>
+                                <div className="section-label" style={{ marginBottom:'14px' }}>Key Metrics</div>
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'9px' }}>
                                     {[
-                                        { label:'Beta (β)', value:result.beta.toFixed(3), note:'Market sensitivity' },
-                                        { label:'Risk-Free Rate', value:(result.riskFreeRate*100).toFixed(2)+'%', note:'Gov bond proxy' },
-                                        { label:'Annual Dividend', value:formatCurrency(result.dividend, result.currency), note:'D₀' },
-                                        { label:'Growth Rate g', value:(result.dividendGrowth*100).toFixed(2)+'%', note: result.growthDetails?.method === 'industry' ? 'Damodaran' : result.growthDetails?.method === 'override' ? 'Manual override' : 'Hist. CAGR' },
+                                        { label:'Beta (β)', val:result.beta.toFixed(3), note:'Market sensitivity', color:'var(--blue)' },
+                                        { label:'Risk-Free Rate', val:(result.riskFreeRate*100).toFixed(2)+'%', note:'Gov. bond proxy', color:'var(--blue)' },
+                                        { label:'Annual Dividend D₀', val:fmt(result.dividend,result.currency), note:'Last 12 months', color:'var(--bull)' },
+                                        { label:'g (perpetuity)', val:(result.dividendGrowth*100).toFixed(2)+'%', note: result.growthDetails?.method==='industry'?'Damodaran GDP×weight': result.growthDetails?.method==='override'?'Manual override':'Hist. CAGR', color:'var(--purple)' },
                                     ].map(m => (
                                         <div key={m.label} className="metric-chip">
-                                            <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginBottom:'4px' }}>{m.label}</div>
-                                            <div className="metric-value" style={{ color:'var(--text)' }}>{m.value}</div>
-                                            <div style={{ fontSize:'0.68rem', color:'var(--text-faint)', marginTop:'2px' }}>{m.note}</div>
+                                            <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>{m.label}</div>
+                                            <div className="metric-val" style={{ color:m.color }}>{m.val}</div>
+                                            <div style={{ fontSize:'0.67rem', color:'var(--text-dim)', marginTop:'3px' }}>{m.note}</div>
                                         </div>
                                     ))}
                                 </div>
-                                {result.eps && (
-                                    <div style={{ marginTop:'10px', display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'10px' }}>
-                                        <div className="metric-chip">
-                                            <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginBottom:'4px' }}>EPS</div>
-                                            <div className="metric-value">{formatCurrency(result.eps, result.currency)}</div>
-                                        </div>
+                                {(result.eps || result.peRatio) && (
+                                    <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'9px', marginTop:'9px' }}>
+                                        {result.eps && (
+                                            <div className="metric-chip">
+                                                <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>EPS</div>
+                                                <div className="metric-val" style={{color:'var(--gold)'}}>{fmt(result.eps,result.currency)}</div>
+                                                {industryEpsGrowthRaw!=null && <div style={{fontSize:'0.67rem',color:'var(--text-dim)',marginTop:'3px'}}>Industry EPS growth: {(industryEpsGrowthRaw*100).toFixed(2)}%</div>}
+                                            </div>
+                                        )}
                                         {result.peRatio && (
                                             <div className="metric-chip">
-                                                <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginBottom:'4px' }}>P/E Ratio</div>
-                                                <div className="metric-value">{result.peRatio.toFixed(2)}×</div>
+                                                <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>Actual P/E Ratio</div>
+                                                <div className="metric-val" style={{color:'var(--blue)'}}>{result.peRatio.toFixed(2)}×</div>
+                                                {result.theoreticalPE && <div style={{fontSize:'0.67rem',color:'var(--text-dim)',marginTop:'3px'}}>Theoretical P/E: {result.theoreticalPE.toFixed(2)}×</div>}
                                             </div>
                                         )}
                                     </div>
@@ -827,79 +862,63 @@
                             </div>
 
                             {/* ── GROWTH BREAKDOWN ── */}
-                            <div className="card animate-fade-up-delay-3" style={{ overflow:'hidden' }}>
+                            <div className="card a3" style={{ overflow:'hidden' }}>
                                 <div style={{ padding:'16px 22px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                                    <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.12em' }}>
-                                        Growth Rate (g) Breakdown
-                                    </div>
+                                    <div className="section-label">g (perpetuity) Breakdown</div>
                                     {!overrideEnabled && (
-                                        <button onClick={() => setOverrideEnabled(true)}
-                                            style={{ background:'rgba(251,191,36,0.08)', border:'1px solid rgba(251,191,36,0.2)', borderRadius:'6px', color:'var(--gold)', fontSize:'0.75rem', padding:'4px 12px', cursor:'pointer', fontFamily:'var(--sans)' }}>
+                                        <button onClick={()=>setOverrideEnabled(true)}
+                                            style={{background:'rgba(255,196,69,0.08)',border:'1px solid rgba(255,196,69,0.2)',borderRadius:'7px',color:'var(--gold)',fontSize:'0.73rem',padding:'4px 12px',cursor:'pointer',fontFamily:'var(--sans)'}}>
                                             Override g
                                         </button>
                                     )}
                                 </div>
                                 <hr className="sep"/>
-                                <div style={{ padding:'16px 22px', fontSize:'0.85rem' }}>
-                                    {result.growthDetails && result.growthDetails.method === 'industry' ? (
-                                        <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                                            <div style={{ display:'flex', justifyContent:'space-between' }}>
-                                                <span style={{ color:'var(--text-muted)' }}>Industry (auto-detected)</span>
-                                                <span style={{ color:'var(--text)', fontFamily:'var(--mono)', fontSize:'0.82rem' }}>{result.growthDetails.industryName}</span>
-                                            </div>
-                                            {(result.tvSector || result.tvIndustry) && (
-                                                <div style={{ display:'flex', justifyContent:'space-between' }}>
-                                                    <span style={{ color:'var(--text-faint)', fontSize:'0.78rem' }}>TradingView classification</span>
-                                                    <span style={{ color:'var(--text-muted)', fontSize:'0.78rem' }}>{[result.tvIndustry, result.tvSector].filter(Boolean).join(' · ')}</span>
+                                <div style={{ padding:'16px 22px' }}>
+                                    {result.growthDetails?.method === 'industry' ? (
+                                        <div>
+                                            {[
+                                                { k:'Damodaran Industry (auto-detected)', v:result.growthDetails.industryName, vColor:'#fff' },
+                                                result.tvSector || result.tvIndustry
+                                                    ? { k:'TradingView classification', v:[result.tvIndustry,result.tvSector].filter(Boolean).join(' · '), vColor:'var(--text-secondary)', small:true }
+                                                    : null,
+                                                { k:'Industry EPS Growth — 5yr (analyst)', v: result.growthDetails.industryEpsGrowth!=null ? Number(result.growthDetails.industryEpsGrowth).toFixed(2)+'%' : 'N/A', vColor:'var(--gold)' },
+                                                { k:'Benchmark Total Market EPS Growth', v: result.growthDetails.benchmarkEpsGrowth!=null ? Number(result.growthDetails.benchmarkEpsGrowth).toFixed(2)+'%' : 'N/A', vColor:'var(--text-secondary)' },
+                                                { k:'Weight = Industry ÷ Benchmark', v: result.growthDetails.weight!=null ? Number(result.growthDetails.weight).toFixed(4) : 'N/A', vColor:'var(--text-secondary)' },
+                                                { k:`GDP Base (${result.currency})`, v: result.growthDetails.gdpBase!=null ? (Number(result.growthDetails.gdpBase)*100).toFixed(1)+'%' : 'N/A', vColor:'var(--text-secondary)' },
+                                            ].filter(Boolean).map(row => (
+                                                <div key={row.k} className="data-row">
+                                                    <span className="data-key" style={{fontSize:row.small?'0.75rem':undefined}}>{row.k}</span>
+                                                    <span className="data-val" style={{color:row.vColor,fontSize:row.small?'0.75rem':undefined}}>{row.v}</span>
                                                 </div>
-                                            )}
-                                            <div style={{ display:'flex', justifyContent:'space-between' }}>
-                                                <span style={{ color:'var(--text-muted)' }}>Industry EPS Growth (5yr)</span>
-                                                <span style={{ color:'var(--text)', fontFamily:'var(--mono)' }}>{result.growthDetails.industryEpsGrowth!=null ? Number(result.growthDetails.industryEpsGrowth).toFixed(2)+'%' : 'N/A'}</span>
-                                            </div>
-                                            <div style={{ display:'flex', justifyContent:'space-between' }}>
-                                                <span style={{ color:'var(--text-muted)' }}>Benchmark (Total Market)</span>
-                                                <span style={{ color:'var(--text)', fontFamily:'var(--mono)' }}>{result.growthDetails.benchmarkEpsGrowth!=null ? Number(result.growthDetails.benchmarkEpsGrowth).toFixed(2)+'%' : 'N/A'}</span>
-                                            </div>
-                                            <div style={{ display:'flex', justifyContent:'space-between' }}>
-                                                <span style={{ color:'var(--text-muted)' }}>Weight (industry ÷ benchmark)</span>
-                                                <span style={{ color:'var(--text)', fontFamily:'var(--mono)' }}>{result.growthDetails.weight!=null ? Number(result.growthDetails.weight).toFixed(4) : 'N/A'}</span>
-                                            </div>
-                                            <div style={{ display:'flex', justifyContent:'space-between' }}>
-                                                <span style={{ color:'var(--text-muted)' }}>GDP Base ({result.currency})</span>
-                                                <span style={{ color:'var(--text)', fontFamily:'var(--mono)' }}>{result.growthDetails.gdpBase!=null ? (Number(result.growthDetails.gdpBase)*100).toFixed(1)+'%' : 'N/A'}</span>
-                                            </div>
-                                            <hr className="sep"/>
-                                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                                                <span style={{ color:'var(--text)', fontWeight:600 }}>g = GDP × Weight{result.growthDetails.capped ? ' (capped)' : ''}</span>
-                                                <span style={{ color:'#c4b5fd', fontFamily:'var(--mono)', fontWeight:600, fontSize:'1rem' }}>{(result.dividendGrowth*100).toFixed(2)}%</span>
+                                            ))}
+                                            <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid rgba(255,255,255,0.07)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                                <span style={{color:'#fff',fontWeight:600,fontSize:'0.87rem'}}>
+                                                    g (perpetuity) = GDP × Weight{result.growthDetails.capped?' (capped)':''}
+                                                </span>
+                                                <span style={{fontFamily:'var(--mono)',color:'var(--purple)',fontWeight:600,fontSize:'1.05rem'}}>{(result.dividendGrowth*100).toFixed(2)}%</span>
                                             </div>
                                             {result.growthDetails.note && (
-                                                <p style={{ color:'var(--text-muted)', fontSize:'0.75rem', fontStyle:'italic', margin:0 }}>{result.growthDetails.note}</p>
+                                                <p style={{color:'var(--text-secondary)',fontSize:'0.74rem',fontStyle:'italic',margin:'8px 0 0'}}>{result.growthDetails.note}</p>
                                             )}
-                                            <p style={{ color:'var(--text-faint)', fontSize:'0.72rem', margin:0 }}>Source: Damodaran NYU Stern {result.growthDetails.damodaranYear||2026}</p>
+                                            <p style={{color:'var(--text-dim)',fontSize:'0.7rem',margin:'6px 0 0'}}>Source: Damodaran NYU Stern {result.growthDetails.damodaranYear||2026}</p>
                                         </div>
-                                    ) : result.growthDetails && result.growthDetails.method === 'override' ? (
+                                    ) : result.growthDetails?.method === 'override' ? (
                                         <div>
-                                            <p style={{ color:'var(--gold)', fontWeight:600, fontFamily:'var(--mono)', margin:'0 0 4px' }}>Manual override: g = {(result.dividendGrowth*100).toFixed(2)}%</p>
-                                            <p style={{ color:'var(--text-muted)', fontSize:'0.78rem', margin:0 }}>User-specified rate — Damodaran industry calculation bypassed.</p>
+                                            <p style={{color:'var(--gold)',fontWeight:600,fontFamily:'var(--mono)',margin:'0 0 4px'}}>Manual override: g (perpetuity) = {(result.dividendGrowth*100).toFixed(2)}%</p>
+                                            <p style={{color:'var(--text-secondary)',fontSize:'0.78rem',margin:0}}>Damodaran industry calculation bypassed. Earnings Yield uses this same g as fallback.</p>
                                         </div>
                                     ) : (
-                                        <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                                            <p style={{ color:'var(--text-muted)', fontStyle:'italic', margin:0, fontSize:'0.82rem' }}>
-                                                Industry not auto-recognized from TradingView
-                                                {(result.tvIndustry || result.tvSector) && (
-                                                    <span style={{ color:'var(--text-faint)' }}> ({[result.tvIndustry, result.tvSector].filter(Boolean).join(' · ')})</span>
-                                                )}
-                                                {' '}— using historical dividend CAGR.
+                                        <div style={{display:'flex',flexDirection:'column',gap:'9px'}}>
+                                            <p style={{color:'var(--text-secondary)',fontStyle:'italic',margin:0,fontSize:'0.83rem'}}>
+                                                Industry not recognized from TradingView{(result.tvIndustry||result.tvSector)&&<span style={{color:'var(--text-dim)'}}> ({[result.tvIndustry,result.tvSector].filter(Boolean).join(' · ')})</span>} — using historical dividend CAGR.
                                             </p>
-                                            <p style={{ color:'var(--text)', fontFamily:'var(--mono)', fontWeight:500, margin:0 }}>g = {(result.dividendGrowth*100).toFixed(2)}%</p>
-                                            {result.industrySuggestions && result.industrySuggestions.length > 0 && (
+                                            <p style={{color:'#fff',fontFamily:'var(--mono)',fontWeight:500,margin:0}}>g (perpetuity) = {(result.dividendGrowth*100).toFixed(2)}%</p>
+                                            {result.industrySuggestions?.length > 0 && (
                                                 <div>
-                                                    <p style={{ color:'var(--text-muted)', fontSize:'0.75rem', marginBottom:'7px' }}>Closest Damodaran matches — select to apply:</p>
-                                                    <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                                                    <p style={{color:'var(--text-secondary)',fontSize:'0.74rem',marginBottom:'7px'}}>Closest Damodaran matches — select to apply industry EPS growth:</p>
+                                                    <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
                                                         {result.industrySuggestions.map(ind => (
-                                                            <button key={ind} onClick={() => calculateValuation(ind)} disabled={loading} className="suggest-pill">{ind}</button>
+                                                            <button key={ind} onClick={()=>calculateValuation(ind)} disabled={loading} className="suggest-pill">{ind}</button>
                                                         ))}
                                                     </div>
                                                 </div>
@@ -909,15 +928,14 @@
                                 </div>
                             </div>
 
-                            {/* ── IRREGULAR DIVIDEND WARNING ── */}
-                            {result.irregularDividend && result.dividendConsistencyIssues && result.dividendConsistencyIssues.length > 0 && (
-                                <div className="animate-fade-up-delay-3" style={{ background:'rgba(251,146,60,0.07)', border:'1px solid rgba(251,146,60,0.25)', borderRadius:'10px', padding:'14px 18px', display:'flex', gap:'10px' }}>
-                                    <div style={{ color:'#fb923c', flexShrink:0, marginTop:'1px' }}><IconWarn/></div>
+                            {/* ── IRREGULAR DIVIDEND ── */}
+                            {result.irregularDividend && result.dividendConsistencyIssues?.length > 0 && (
+                                <div className="a3" style={{background:'rgba(251,146,60,0.07)',border:'1px solid rgba(251,146,60,0.22)',borderRadius:'12px',padding:'14px 18px',display:'flex',gap:'10px'}}>
+                                    <div style={{color:'#fb923c',flexShrink:0,marginTop:'1px'}}><IconWarn/></div>
                                     <div>
-                                        <p style={{ color:'#fb923c', fontWeight:600, fontSize:'0.85rem', margin:'0 0 4px' }}>Irregular Dividend Pattern Detected</p>
-                                        <p style={{ color:'rgba(251,146,60,0.8)', fontSize:'0.78rem', margin:'0 0 6px' }}>Gordon Model assumes constant growth — irregular patterns reduce reliability:</p>
-                                        <ul style={{ color:'rgba(251,146,60,0.75)', fontSize:'0.78rem', margin:0, paddingLeft:'16px' }}>
-                                            {result.dividendConsistencyIssues.map((issue,i) => <li key={i}>{issue}</li>)}
+                                        <p style={{color:'#fb923c',fontWeight:600,fontSize:'0.85rem',margin:'0 0 5px'}}>Irregular Dividend Pattern</p>
+                                        <ul style={{color:'rgba(251,146,60,0.78)',fontSize:'0.78rem',margin:0,paddingLeft:'16px'}}>
+                                            {result.dividendConsistencyIssues.map((iss,i)=><li key={i}>{iss}</li>)}
                                         </ul>
                                     </div>
                                 </div>
@@ -925,56 +943,48 @@
 
                             {/* ── P/E ANALYSIS ── */}
                             {result.peRatio && (
-                                <div className="card animate-fade-up-delay-3" style={{ padding:'20px 22px' }}>
-                                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
-                                        <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.12em' }}>P/E Ratio Analysis</div>
-                                        {result.currency === 'VND' && <span style={{ fontSize:'0.72rem', color:'var(--text-faint)' }}>Source: VCI via vnstock</span>}
+                                <div className="card a3" style={{padding:'20px 22px'}}>
+                                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px'}}>
+                                        <div className="section-label">P/E Ratio Analysis</div>
+                                        {result.currency==='VND'&&<span style={{fontSize:'0.7rem',color:'var(--text-dim)'}}>VCI via vnstock</span>}
                                     </div>
-
                                     {result.dividendGrowth > result.capmReturn && (
-                                        <div style={{ background:'rgba(251,191,36,0.06)', border:'1px solid rgba(251,191,36,0.18)', borderRadius:'8px', padding:'10px 14px', marginBottom:'14px', display:'flex', gap:'8px' }}>
-                                            <div style={{ color:'var(--gold)', flexShrink:0 }}><IconWarn/></div>
-                                            <div>
-                                                <p style={{ color:'var(--gold)', fontWeight:600, fontSize:'0.82rem', margin:'0 0 2px' }}>High-Growth Stock</p>
-                                                <p style={{ color:'rgba(251,191,36,0.75)', fontSize:'0.75rem', margin:0 }}>
-                                                    g ({(result.dividendGrowth*100).toFixed(2)}%) exceeds ke ({(result.capmReturn*100).toFixed(2)}%) — Theoretical P/E undefined. Gordon Model inapplicable.
-                                                </p>
-                                            </div>
+                                        <div className="warn-box" style={{marginBottom:'14px'}}>
+                                            <div style={{color:'var(--gold)',flexShrink:0}}><IconWarn/></div>
+                                            <p style={{color:'var(--gold)',fontSize:'0.8rem',margin:0}}>High-growth stock: g ({(result.dividendGrowth*100).toFixed(2)}%) exceeds kₑ ({(result.capmReturn*100).toFixed(2)}%). Theoretical P/E undefined — Gordon inapplicable.</p>
                                         </div>
                                     )}
-
-                                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:'16px' }}>
+                                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(185px,1fr))',gap:'16px'}}>
                                         <div>
-                                            <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', marginBottom:'10px', fontWeight:600 }}>Key Drivers</div>
-                                            <div style={{ display:'flex', flexDirection:'column', gap:'8px', fontSize:'0.83rem' }}>
-                                                <div style={{ display:'flex', justifyContent:'space-between' }}>
-                                                    <span style={{ color:'var(--text-muted)' }}>EPS</span>
-                                                    <span style={{ fontFamily:'var(--mono)', color:'var(--text)' }}>{formatCurrency(result.eps, result.currency)}</span>
+                                            <div style={{fontSize:'0.75rem',color:'var(--text-secondary)',fontWeight:600,marginBottom:'10px'}}>Key Drivers</div>
+                                            {[
+                                                { k:'EPS', v:fmt(result.eps,result.currency), c:'var(--gold)' },
+                                                { k:'Actual P/E', v:result.peRatio.toFixed(2)+'×', c:'var(--blue)' },
+                                                result.theoreticalPE?{ k:'Theoretical P/E', v:result.theoreticalPE.toFixed(2)+'×', c:'var(--text-secondary)' }:null,
+                                            ].filter(Boolean).map(r=>(
+                                                <div key={r.k} className="data-row">
+                                                    <span className="data-key">{r.k}</span>
+                                                    <span className="data-val" style={{color:r.c}}>{r.v}</span>
                                                 </div>
-                                                <div style={{ display:'flex', justifyContent:'space-between' }}>
-                                                    <span style={{ color:'var(--text-muted)' }}>Actual P/E</span>
-                                                    <span style={{ fontFamily:'var(--mono)', color:'var(--capm-blue)', fontWeight:500 }}>{result.peRatio.toFixed(2)}×</span>
-                                                </div>
-                                                {result.theoreticalPE && (
-                                                    <div style={{ display:'flex', justifyContent:'space-between' }}>
-                                                        <span style={{ color:'var(--text-muted)' }}>Theoretical P/E</span>
-                                                        <span style={{ fontFamily:'var(--mono)', color:'var(--text-muted)' }}>{result.theoreticalPE.toFixed(2)}×</span>
-                                                    </div>
-                                                )}
-                                            </div>
+                                            ))}
                                         </div>
                                         <div>
-                                            <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', marginBottom:'10px', fontWeight:600 }}>P/E Components</div>
-                                            <div style={{ display:'flex', flexDirection:'column', gap:'8px', fontSize:'0.83rem' }}>
-                                                {result.payoutRatio!=null && <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'var(--text-muted)' }}>Payout Ratio</span><span style={{ fontFamily:'var(--mono)', color:'var(--text)' }}>{(result.payoutRatio*100).toFixed(1)}%</span></div>}
-                                                {result.retentionRatio!=null && <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'var(--text-muted)' }}>Retention Ratio</span><span style={{ fontFamily:'var(--mono)', color:'var(--text)' }}>{(result.retentionRatio*100).toFixed(1)}%</span></div>}
-                                                <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'var(--text-muted)' }}>Required Return kₑ</span><span style={{ fontFamily:'var(--mono)', color:'var(--text)' }}>{(result.capmReturn*100).toFixed(2)}%</span></div>
-                                                <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'var(--text-muted)' }}>Growth Rate g</span><span style={{ fontFamily:'var(--mono)', color:'var(--text)' }}>{(result.dividendGrowth*100).toFixed(2)}%</span></div>
-                                            </div>
+                                            <div style={{fontSize:'0.75rem',color:'var(--text-secondary)',fontWeight:600,marginBottom:'10px'}}>Components</div>
+                                            {[
+                                                result.payoutRatio!=null?{ k:'Payout Ratio', v:(result.payoutRatio*100).toFixed(1)+'%' }:null,
+                                                result.retentionRatio!=null?{ k:'Retention Ratio', v:(result.retentionRatio*100).toFixed(1)+'%' }:null,
+                                                { k:'Required Return kₑ', v:(result.capmReturn*100).toFixed(2)+'%' },
+                                                { k:'g (perpetuity)', v:(result.dividendGrowth*100).toFixed(2)+'%' },
+                                            ].filter(Boolean).map(r=>(
+                                                <div key={r.k} className="data-row">
+                                                    <span className="data-key">{r.k}</span>
+                                                    <span className="data-val">{r.v}</span>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                     {result.payoutRatio && result.theoreticalPE && (
-                                        <div style={{ marginTop:'14px', paddingTop:'14px', borderTop:'1px solid var(--border)', fontSize:'0.78rem', color:'var(--text-muted)', fontFamily:'var(--mono)' }}>
+                                        <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid rgba(255,255,255,0.06)',fontSize:'0.76rem',color:'var(--text-secondary)',fontFamily:'var(--mono)'}}>
                                             P/E = {(result.payoutRatio*100).toFixed(1)}% ÷ ({(result.capmReturn*100).toFixed(2)}% − {(result.dividendGrowth*100).toFixed(2)}%) = {result.theoreticalPE.toFixed(2)}×
                                         </div>
                                     )}
@@ -982,82 +992,75 @@
                             )}
 
                             {/* ── INTERPRETATION ── */}
-                            <div className="card animate-fade-up-delay-4" style={{ padding:'20px 22px' }}>
-                                <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.12em', marginBottom:'14px' }}>
-                                    Interpretation
-                                </div>
-                                <p style={{ color:'rgba(226,232,240,0.8)', fontSize:'0.88rem', lineHeight:1.75, margin:0 }}>
-                                    {primaryValuation === 'UNDERVALUED' ? (
-                                        <>The primary return signal (<span style={{ color:'var(--bull)', fontFamily:'var(--mono)' }}>{hasGordon ? (result.gordonReturn*100).toFixed(2) : (earningsYieldReturn*100).toFixed(2)}%</span>) is <span style={{ color:'var(--bull)', fontWeight:600 }}>above</span> the CAPM hurdle rate (<span style={{ color:'var(--capm-blue)', fontFamily:'var(--mono)' }}>{(result.capmReturn*100).toFixed(2)}%</span>). The stock appears <span style={{ color:'var(--bull)', fontWeight:700 }}>undervalued</span> at {formatCurrency(result.currentPrice, result.currency)} — the implied fair value is {formatCurrency(result.fairPrice, result.currency)}. The price should theoretically <span style={{ color:'var(--bull)', fontWeight:600 }}>rise</span> toward equilibrium.</>
-                                    ) : (
-                                        <>The primary return signal (<span style={{ color:'var(--bear)', fontFamily:'var(--mono)' }}>{hasGordon ? (result.gordonReturn*100).toFixed(2) : (earningsYieldReturn*100).toFixed(2)}%</span>) is <span style={{ color:'var(--bear)', fontWeight:600 }}>below</span> the CAPM hurdle rate (<span style={{ color:'var(--capm-blue)', fontFamily:'var(--mono)' }}>{(result.capmReturn*100).toFixed(2)}%</span>). The stock appears <span style={{ color:'var(--bear)', fontWeight:700 }}>overvalued</span> at {formatCurrency(result.currentPrice, result.currency)} — the implied fair value is {formatCurrency(result.fairPrice, result.currency)}. The price should theoretically <span style={{ color:'var(--bear)', fontWeight:600 }}>fall</span> toward equilibrium.</>
-                                    )}
+                            <div className="card a4" style={{padding:'20px 22px'}}>
+                                <div className="section-label" style={{marginBottom:'14px'}}>Interpretation</div>
+                                <p style={{color:'rgba(240,244,255,0.85)',fontSize:'0.88rem',lineHeight:1.78,margin:0}}>
+                                    {isBull
+                                        ? <>The primary return signal (<span style={{color:'var(--bull)',fontFamily:'var(--mono)'}}>{hasGordon?(result.gordonReturn*100).toFixed(2):(earningsYieldReturn*100).toFixed(2)}%</span>) clears the CAPM hurdle (<span style={{color:'var(--blue)',fontFamily:'var(--mono)'}}>{(result.capmReturn*100).toFixed(2)}%</span>). The stock appears <span style={{color:'var(--bull)',fontWeight:700}}>undervalued</span> at {fmt(result.currentPrice,result.currency)} — implied fair value is <span style={{color:'var(--bull)',fontWeight:600}}>{fmt(result.fairPrice,result.currency)}</span>. Theory expects the price to <span style={{color:'var(--bull)',fontWeight:600}}>rise</span> toward equilibrium.</>
+                                        : <>The primary return signal (<span style={{color:'var(--bear)',fontFamily:'var(--mono)'}}>{hasGordon?(result.gordonReturn*100).toFixed(2):(earningsYieldReturn*100).toFixed(2)}%</span>) falls below the CAPM hurdle (<span style={{color:'var(--blue)',fontFamily:'var(--mono)'}}>{(result.capmReturn*100).toFixed(2)}%</span>). The stock appears <span style={{color:'var(--bear)',fontWeight:700}}>overvalued</span> at {fmt(result.currentPrice,result.currency)} — implied fair value is <span style={{color:'var(--bear)',fontWeight:600}}>{fmt(result.fairPrice,result.currency)}</span>. Theory expects the price to <span style={{color:'var(--bear)',fontWeight:600}}>fall</span> toward equilibrium.</>
+                                    }
                                 </p>
                             </div>
 
                             {/* ── DATA SOURCES ── */}
                             {result.sources && (
-                                <div className="card animate-fade-up-delay-4" style={{ padding:'16px 22px' }}>
-                                    <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.12em', marginBottom:'12px' }}>
-                                        Data Sources
-                                    </div>
-                                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'6px', fontSize:'0.78rem' }}>
-                                        {Object.entries(result.sources).map(([k,v]) => (
-                                            <div key={k} style={{ display:'flex', gap:'6px' }}>
-                                                <span style={{ color:'var(--text-faint)', textTransform:'capitalize' }}>{k.replace(/([A-Z])/g,' $1').trim()}:</span>
-                                                <span style={{ color:'var(--text-muted)' }}>{v}</span>
+                                <div className="card a4" style={{padding:'16px 22px'}}>
+                                    <div className="section-label" style={{marginBottom:'11px'}}>Data Sources</div>
+                                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(195px,1fr))',gap:'5px 16px'}}>
+                                        {Object.entries(result.sources).map(([k,v])=>(
+                                            <div key={k} style={{display:'flex',gap:'6px',fontSize:'0.77rem'}}>
+                                                <span style={{color:'var(--text-dim)',textTransform:'capitalize',whiteSpace:'nowrap'}}>{k.replace(/([A-Z])/g,' $1').trim()}:</span>
+                                                <span style={{color:'var(--text-secondary)'}}>{v}</span>
                                             </div>
                                         ))}
                                     </div>
-                                    <p style={{ fontSize:'0.72rem', color:'var(--text-faint)', marginTop:'10px', fontStyle:'italic' }}>Powered by TradingView · Yahoo Finance · Damodaran NYU Stern 2026</p>
+                                    <p style={{fontSize:'0.7rem',color:'var(--text-dim)',marginTop:'9px',fontStyle:'italic'}}>
+                                        Powered by TradingView · Yahoo Finance · Damodaran NYU Stern 2026
+                                    </p>
                                 </div>
                             )}
 
-                            {/* ── MODEL ASSUMPTIONS (accordion) ── */}
-                            <div className="card animate-fade-up-delay-5" style={{ overflow:'hidden' }}>
-                                <button onClick={() => setShowAssumptions(v => !v)}
-                                    style={{ width:'100%', background:'none', border:'none', cursor:'pointer', padding:'14px 22px', display:'flex', justifyContent:'space-between', alignItems:'center', color:'var(--text-muted)' }}>
-                                    <span style={{ fontSize:'0.72rem', textTransform:'uppercase', letterSpacing:'0.12em', display:'flex', alignItems:'center', gap:'6px' }}>
-                                        <IconInfo/> Model Assumptions &amp; Limitations
-                                    </span>
-                                    <IconChevron open={showAssumptions}/>
+                            {/* ── ASSUMPTIONS ACCORDION ── */}
+                            <div className="card a5" style={{overflow:'hidden'}}>
+                                <button className="acc-btn" onClick={()=>setShowAssumptions(v=>!v)}>
+                                    <span style={{display:'flex',alignItems:'center',gap:'6px'}}><IconInfo/> Model Assumptions &amp; Limitations</span>
+                                    <IconChev open={showAssumptions}/>
                                 </button>
                                 {showAssumptions && (
-                                    <div style={{ padding:'0 22px 18px', display:'flex', flexDirection:'column', gap:'12px' }}>
+                                    <div style={{padding:'0 22px 18px',display:'flex',flexDirection:'column',gap:'12px'}}>
                                         {[
-                                            { title:'CAPM Assumptions', items:['Diversified portfolios eliminate unsystematic risk','Single-period transaction horizon','Borrow/lend at the risk-free rate','Perfect capital market — no friction costs','Homogeneous investor expectations'] },
-                                            { title:'Gordon Growth Model Assumptions', items:['Company exists in perpetuity','Dividends grow at a constant rate forever','Required return kₑ must exceed growth rate g','Stable macroeconomic environment assumed'] },
-                                            { title:'Key Limitations', items:['CAPM ignores transaction costs & market inefficiencies','Gordon Model breaks down for irregular or zero-dividend payers','Neither model captures sentiment, news, or macro shocks','Earnings Yield proxy improves coverage for non-dividend stocks'] },
-                                        ].map(section => (
-                                            <div key={section.title}>
-                                                <div style={{ fontSize:'0.78rem', fontWeight:600, color:'var(--text-muted)', marginBottom:'6px' }}>{section.title}</div>
-                                                <ul style={{ margin:0, paddingLeft:'16px', display:'flex', flexDirection:'column', gap:'3px' }}>
-                                                    {section.items.map((item,i) => (
-                                                        <li key={i} style={{ fontSize:'0.78rem', color:'var(--text-faint)', lineHeight:1.5 }}>{item}</li>
-                                                    ))}
+                                            { t:'CAPM Assumptions', items:['Diversified portfolios — unsystematic risk eliminated','Single-period transaction horizon','Borrow/lend at risk-free rate — no friction','Perfect capital markets — no transaction costs','Homogeneous investor expectations'] },
+                                            { t:'Gordon Growth Model Assumptions', items:['Company exists in perpetuity','Dividends grow at constant rate g forever','Required return kₑ must exceed g','Stable macro environment'] },
+                                            { t:'Earnings Yield Notes', items:['Uses raw Damodaran industry EPS growth (5yr analyst estimate), not the GDP-weighted perpetuity g','Provides broader coverage — valid even for non-dividend-paying stocks','Higher g reflects analyst optimism, not a perpetuity-safe rate'] },
+                                            { t:'Key Limitations', items:['CAPM ignores transaction costs and market inefficiencies','Gordon DDM breaks down for irregular/zero-dividend payers','Neither model captures sentiment, news, or macro shocks'] },
+                                        ].map(s=>(
+                                            <div key={s.t}>
+                                                <div style={{fontSize:'0.78rem',fontWeight:600,color:'var(--text-secondary)',marginBottom:'6px'}}>{s.t}</div>
+                                                <ul style={{margin:0,paddingLeft:'16px',display:'flex',flexDirection:'column',gap:'3px'}}>
+                                                    {s.items.map((it,i)=><li key={i} style={{fontSize:'0.77rem',color:'var(--text-dim)',lineHeight:1.55}}>{it}</li>)}
                                                 </ul>
                                             </div>
                                         ))}
-                                        <p style={{ fontSize:'0.75rem', color:'var(--text-faint)', fontStyle:'italic', margin:0 }}>
-                                            Reference: <a href="https://www.investopedia.com/terms/c/capm.asp" target="_blank" rel="noopener noreferrer" style={{ color:'var(--capm-blue)', textDecoration:'none' }}>Investopedia CAPM</a> · <a href="https://www.investopedia.com/terms/g/gordongrowthmodel.asp" target="_blank" rel="noopener noreferrer" style={{ color:'var(--capm-blue)', textDecoration:'none' }}>Gordon Growth Model</a>
+                                        <p style={{fontSize:'0.73rem',color:'var(--text-dim)',fontStyle:'italic',margin:0}}>
+                                            <a href="https://www.investopedia.com/terms/c/capm.asp" target="_blank" rel="noopener noreferrer" style={{color:'var(--blue)',textDecoration:'none'}}>CAPM</a>{' · '}
+                                            <a href="https://www.investopedia.com/terms/g/gordongrowthmodel.asp" target="_blank" rel="noopener noreferrer" style={{color:'var(--blue)',textDecoration:'none'}}>Gordon Growth Model</a>
                                         </p>
                                     </div>
                                 )}
                             </div>
 
-                            {/* Disclaimer */}
-                            <p style={{ textAlign:'center', color:'var(--text-faint)', fontSize:'0.72rem', fontStyle:'italic', lineHeight:1.6, margin:'4px 0 0' }}>
-                                This analysis is based on theoretical models. Not investment advice.<br/>
-                                Actual prices may diverge due to market sentiment, company events, and macroeconomic factors.
+                            <p style={{textAlign:'center',color:'var(--text-dim)',fontSize:'0.7rem',fontStyle:'italic',lineHeight:1.65,margin:'2px 0 0'}}>
+                                Theoretical models only. Not investment advice.<br/>
+                                Actual prices may diverge due to market sentiment, corporate events, and macro factors.
                             </p>
                         </div>
                     );
                 })()}
 
                 {/* Footer */}
-                <div style={{ textAlign:'center', marginTop:'40px', paddingBottom:'16px' }}>
-                    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'6px', color:'var(--text-faint)', fontSize:'0.72rem', fontFamily:'var(--mono)' }}>
-                        <span className="pulse-dot" style={{ width:'5px', height:'5px', borderRadius:'50%', background:'var(--bull)', display:'inline-block' }}/>
+                <div style={{textAlign:'center',marginTop:'44px',paddingBottom:'8px'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'7px',color:'var(--text-dim)',fontSize:'0.7rem',fontFamily:'var(--mono)'}}>
+                        <span className="pulse-dot" style={{width:'5px',height:'5px',borderRadius:'50%',background:'var(--bull)',display:'inline-block',boxShadow:'0 0 6px var(--bull)'}}/>
                         CAPM · Gordon DDM · Earnings Yield Terminal
                     </div>
                 </div>
@@ -1066,8 +1069,7 @@
         );
     }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<CAPMGordonCalculator />);
+    ReactDOM.createRoot(document.getElementById('root')).render(<CAPMGordonCalculator/>);
 </script>
 </body>
 </html>
