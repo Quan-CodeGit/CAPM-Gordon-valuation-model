@@ -21,10 +21,10 @@
 
     <style>
         :root {
-            --bg: #05080f;
-            --card-bg: rgba(10, 16, 30, 0.82);
-            --card-border: rgba(255,255,255,0.09);
-            --card-border-bright: rgba(255,255,255,0.18);
+            --bg: #030508;
+            --card-bg: rgba(8, 10, 22, 0.85);
+            --card-border: rgba(140,100,255,0.1);
+            --card-border-bright: rgba(160,120,255,0.28);
             --bull: #10f07a;
             --bull-glow: rgba(16, 240, 122, 0.22);
             --bear: #ff4060;
@@ -33,9 +33,10 @@
             --blue-glow: rgba(94, 173, 255, 0.15);
             --gold: #ffc445;
             --purple: #c084fc;
+            --cosmic: #a78bfa;
             --text-primary: #f0f4ff;
             --text-secondary: #8fa3c0;
-            --text-dim: #3d5070;
+            --text-dim: #3d4a6a;
             --mono: 'DM Mono', monospace;
             --sans: 'Sora', sans-serif;
         }
@@ -60,18 +61,29 @@
             pointer-events: none;
         }
 
-        /* ── Nebula glow ───────────────────────────────── */
+        /* ── Galaxy nebula ─────────────────────────────── */
         #nebula {
             position: fixed; inset: 0; z-index: 0; pointer-events: none;
             background:
-                radial-gradient(ellipse 70% 55% at 18% 25%, rgba(16,240,122,0.055) 0%, transparent 65%),
-                radial-gradient(ellipse 55% 65% at 88% 72%, rgba(255,64,96,0.055) 0%, transparent 65%),
-                radial-gradient(ellipse 45% 45% at 55% 5%,  rgba(94,173,255,0.04) 0%, transparent 60%);
-            animation: nebula-drift 24s ease-in-out infinite alternate;
+                radial-gradient(ellipse 70% 55% at 15% 20%, rgba(120,60,255,0.09) 0%, transparent 60%),
+                radial-gradient(ellipse 55% 60% at 88% 78%, rgba(255,64,96,0.06) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 40% at 55% 5%,  rgba(60,130,255,0.07) 0%, transparent 58%),
+                radial-gradient(ellipse 40% 50% at 78% 30%, rgba(180,80,255,0.06) 0%, transparent 55%),
+                radial-gradient(ellipse 60% 35% at 30% 80%, rgba(16,200,180,0.04) 0%, transparent 55%);
+            animation: nebula-drift 30s ease-in-out infinite alternate;
+        }
+        #nebula-pulse {
+            position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background: radial-gradient(ellipse 40% 40% at 50% 50%, rgba(100,60,200,0.03) 0%, transparent 70%);
+            animation: nebula-pulse 8s ease-in-out infinite alternate;
         }
         @keyframes nebula-drift {
-            0%   { opacity: 0.7; transform: scale(1); }
-            100% { opacity: 1;   transform: scale(1.06) translateY(-14px); }
+            0%   { opacity: 0.65; transform: scale(1)    translateY(0); }
+            100% { opacity: 1;    transform: scale(1.07) translateY(-18px); }
+        }
+        @keyframes nebula-pulse {
+            0%   { opacity: 0.4; transform: scale(0.95); }
+            100% { opacity: 1;   transform: scale(1.08); }
         }
 
         /* ── App wrapper ───────────────────────────────── */
@@ -82,19 +94,22 @@
             background: var(--card-bg);
             border: 1px solid var(--card-border);
             border-radius: 14px;
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
             position: relative;
             overflow: hidden;
-            transition: border-color 0.25s, box-shadow 0.25s;
+            transition: border-color 0.3s, box-shadow 0.3s;
         }
         .card::before {
             content: '';
             position: absolute; top: 0; left: 8%; right: 8%; height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
+            background: linear-gradient(90deg, transparent, rgba(160,120,255,0.35), rgba(100,180,255,0.2), transparent);
             pointer-events: none;
         }
-        .card:hover { border-color: var(--card-border-bright); }
+        .card:hover {
+            border-color: var(--card-border-bright);
+            box-shadow: 0 0 28px rgba(120,80,255,0.08), 0 4px 24px rgba(0,0,0,0.4);
+        }
 
         /* ── Section label ─────────────────────────────── */
         .section-label {
@@ -144,15 +159,31 @@
 
         /* ── Animations ────────────────────────────────── */
         @keyframes fadeUp {
-            from { opacity:0; transform: translateY(18px); }
+            from { opacity:0; transform: translateY(22px); }
             to   { opacity:1; transform: translateY(0); }
         }
-        .a0 { animation: fadeUp 0.45s 0.00s cubic-bezier(0.16,1,0.3,1) both; }
-        .a1 { animation: fadeUp 0.45s 0.08s cubic-bezier(0.16,1,0.3,1) both; }
-        .a2 { animation: fadeUp 0.45s 0.16s cubic-bezier(0.16,1,0.3,1) both; }
-        .a3 { animation: fadeUp 0.45s 0.24s cubic-bezier(0.16,1,0.3,1) both; }
-        .a4 { animation: fadeUp 0.45s 0.32s cubic-bezier(0.16,1,0.3,1) both; }
-        .a5 { animation: fadeUp 0.45s 0.40s cubic-bezier(0.16,1,0.3,1) both; }
+        @keyframes fadeLeft {
+            from { opacity:0; transform: translateX(-36px); }
+            to   { opacity:1; transform: translateX(0); }
+        }
+        @keyframes fadeRight {
+            from { opacity:0; transform: translateX(36px); }
+            to   { opacity:1; transform: translateX(0); }
+        }
+        .a0  { animation: fadeUp    0.55s 0.00s cubic-bezier(0.16,1,0.3,1) both; }
+        .a1  { animation: fadeUp    0.50s 0.08s cubic-bezier(0.16,1,0.3,1) both; }
+        .a2  { animation: fadeUp    0.50s 0.16s cubic-bezier(0.16,1,0.3,1) both; }
+        .a3  { animation: fadeUp    0.50s 0.24s cubic-bezier(0.16,1,0.3,1) both; }
+        .a4  { animation: fadeUp    0.50s 0.32s cubic-bezier(0.16,1,0.3,1) both; }
+        .a5  { animation: fadeUp    0.50s 0.40s cubic-bezier(0.16,1,0.3,1) both; }
+        /* Directional card entrances */
+        .aL1 { animation: fadeLeft  0.55s 0.08s cubic-bezier(0.16,1,0.3,1) both; }
+        .aR2 { animation: fadeRight 0.55s 0.16s cubic-bezier(0.16,1,0.3,1) both; }
+        .aL3 { animation: fadeLeft  0.55s 0.24s cubic-bezier(0.16,1,0.3,1) both; }
+        .aR3 { animation: fadeRight 0.55s 0.24s cubic-bezier(0.16,1,0.3,1) both; }
+        .aL4 { animation: fadeLeft  0.55s 0.32s cubic-bezier(0.16,1,0.3,1) both; }
+        .aR4 { animation: fadeRight 0.55s 0.32s cubic-bezier(0.16,1,0.3,1) both; }
+        .aL5 { animation: fadeLeft  0.55s 0.40s cubic-bezier(0.16,1,0.3,1) both; }
 
         /* Bar grow */
         @keyframes barGrow { from { width:0; } }
@@ -322,9 +353,11 @@
         .header-title {
             font-family: var(--sans); font-weight: 700;
             font-size: clamp(1.6rem, 4vw, 2.3rem);
-            background: linear-gradient(135deg, #ffffff 0%, #c8d8f0 50%, #8faed8 100%);
+            background: linear-gradient(135deg, #ffffff 0%, #d4b8ff 30%, #7eb8ff 65%, #b8a0ff 100%);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
             letter-spacing: -0.025em; margin: 0 0 8px;
+            filter: drop-shadow(0 0 20px rgba(140,100,255,0.3));
         }
 
         /* ── Warning box ───────────────────────────────── */
@@ -344,64 +377,150 @@
 </head>
 <body>
 
-<!-- Star canvas -->
+<!-- Galaxy canvas -->
 <canvas id="star-canvas"></canvas>
-<!-- Nebula overlay -->
+<!-- Nebula layers -->
 <div id="nebula"></div>
+<div id="nebula-pulse"></div>
 
 <div id="root" style="position:relative;z-index:1;"></div>
 
-<!-- Star field animation — runs outside React, totally safe -->
+<!-- Galaxy field + comet animation -->
 <script>
 (function() {
     var canvas = document.getElementById('star-canvas');
+    var ctx = canvas.getContext('2d');
     var stars = [];
+    var comets = [];
+    var lastCometMs = 0;
+    var COMET_EVERY = 3800;
     var animId;
 
-    function resize() {
-        canvas.width  = window.innerWidth;
-        canvas.height = window.innerHeight;
+    // Star tints: mostly cool white-blue, some warm gold, some purple
+    var TINTS = ['215,228,255','200,215,255','180,200,255','255,240,200','220,180,255'];
+
+    function buildStars() {
         stars = [];
-        var count = Math.floor((canvas.width * canvas.height) / 5000);
-        count = Math.min(Math.max(count, 120), 280);
+        var count = Math.min(Math.max(Math.floor((canvas.width * canvas.height) / 4500), 160), 340);
         for (var i = 0; i < count; i++) {
             var r = Math.random();
+            var isBright = r > 0.95;
+            var isMed    = r > 0.76;
             stars.push({
                 x: Math.random() * canvas.width,
                 y: Math.random() * canvas.height,
-                radius: r < 0.75 ? Math.random() * 0.6 + 0.2   // small: 0.2–0.8
-                       : r < 0.95 ? Math.random() * 0.8 + 0.8   // medium: 0.8–1.6
-                       :            Math.random() * 1.0 + 1.6,   // bright: 1.6–2.6
-                baseAlpha: r < 0.75 ? Math.random() * 0.35 + 0.2
-                          : r < 0.95 ? Math.random() * 0.45 + 0.35
-                          :            Math.random() * 0.3  + 0.65,
-                speed:  Math.random() * 0.008 + 0.003,
+                radius: isBright ? Math.random() * 1.1 + 1.6
+                       : isMed   ? Math.random() * 0.8 + 0.7
+                       :           Math.random() * 0.45 + 0.15,
+                baseAlpha: isBright ? Math.random() * 0.22 + 0.72
+                          : isMed   ? Math.random() * 0.38 + 0.3
+                          :           Math.random() * 0.28 + 0.14,
+                speed:  Math.random() * 0.007 + 0.002,
                 offset: Math.random() * Math.PI * 2,
-                glow: r > 0.95
+                glow:   isBright,
+                tint:   TINTS[Math.floor(Math.random() * TINTS.length)]
             });
         }
     }
 
-    function draw(time) {
-        var ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        var t = time * 0.001;
-        for (var i = 0; i < stars.length; i++) {
-            var s = stars[i];
-            var alpha = s.baseAlpha + Math.sin(t * s.speed * 6 + s.offset) * 0.18;
-            alpha = Math.max(0.05, Math.min(1, alpha));
+    function resize() {
+        canvas.width  = window.innerWidth;
+        canvas.height = window.innerHeight;
+        buildStars();
+    }
 
-            ctx.save();
-            if (s.glow) {
-                ctx.shadowBlur = 8;
-                ctx.shadowColor = 'rgba(200, 220, 255, 0.8)';
-            }
+    function spawnComet() {
+        var fromLeft = Math.random() > 0.5;
+        // Angle: slight diagonal, mostly horizontal
+        var angleDeg = (Math.random() * 18 - 9) + (fromLeft ? 0 : 180);
+        var angleRad = angleDeg * Math.PI / 180;
+        var speed = 6 + Math.random() * 5;
+        comets.push({
+            x:       fromLeft ? -100 : canvas.width + 100,
+            y:       canvas.height * (0.05 + Math.random() * 0.7),
+            vx:      Math.cos(angleRad) * speed,
+            vy:      Math.sin(angleRad) * speed,
+            tailLen: 100 + Math.random() * 130,
+            life:    0,
+            maxLife: 80 + Math.random() * 60,
+            width:   1.2 + Math.random() * 0.8
+        });
+    }
+
+    function drawComets() {
+        for (var j = comets.length - 1; j >= 0; j--) {
+            var c = comets[j];
+            c.life++;
+            c.x += c.vx;
+            c.y += c.vy;
+            if (c.life > c.maxLife) { comets.splice(j, 1); continue; }
+
+            var prog = c.life / c.maxLife;
+            // Fade in first 15%, hold, fade out last 20%
+            var a = prog < 0.15 ? prog / 0.15
+                  : prog > 0.80 ? (1 - prog) / 0.20
+                  : 1;
+            a = Math.min(a * 0.85, 0.85);
+
+            var spd = Math.hypot(c.vx, c.vy);
+            var nx  = c.vx / spd;
+            var ny  = c.vy / spd;
+            var tx  = c.x - nx * c.tailLen;
+            var ty  = c.y - ny * c.tailLen;
+
+            var grad = ctx.createLinearGradient(tx, ty, c.x, c.y);
+            grad.addColorStop(0,   'rgba(160,140,255,0)');
+            grad.addColorStop(0.5, 'rgba(200,180,255,' + (a * 0.35) + ')');
+            grad.addColorStop(1,   'rgba(240,235,255,' + a + ')');
+
             ctx.beginPath();
-            ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(220, 235, 255, ' + alpha + ')';
+            ctx.moveTo(tx, ty);
+            ctx.lineTo(c.x, c.y);
+            ctx.strokeStyle = grad;
+            ctx.lineWidth   = c.width;
+            ctx.lineCap     = 'round';
+            ctx.stroke();
+
+            // Head sparkle
+            ctx.save();
+            ctx.shadowBlur  = 16;
+            ctx.shadowColor = 'rgba(200,180,255,0.9)';
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, 2, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255,252,255,' + a + ')';
             ctx.fill();
             ctx.restore();
         }
+    }
+
+    function draw(time) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        var t = time * 0.001;
+
+        // Stars
+        for (var i = 0; i < stars.length; i++) {
+            var s = stars[i];
+            var alpha = s.baseAlpha + Math.sin(t * s.speed * 6.28 + s.offset) * 0.15;
+            alpha = Math.max(0.04, Math.min(1, alpha));
+            ctx.save();
+            if (s.glow) {
+                ctx.shadowBlur  = 11;
+                ctx.shadowColor = 'rgba(' + s.tint + ', 0.9)';
+            }
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(' + s.tint + ', ' + alpha + ')';
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // Spawn & draw comets
+        if (time - lastCometMs > COMET_EVERY) {
+            spawnComet();
+            lastCometMs = time;
+        }
+        drawComets();
+
         animId = requestAnimationFrame(draw);
     }
 
@@ -555,17 +674,10 @@
             } finally { setLoading(false); }
         };
 
-        /* ── Derived: Earnings Yield + Industry EPS Growth ──
-         * Use raw Damodaran industry EPS growth (the analyst estimate,
-         * NOT the GDP-weighted perpetuity g used in Gordon DDM).
-         * Falls back to dividendGrowth when no industry data.
+        /* ── Derived: Earnings Yield + g ──
+         * Uses same adjusted perpetuity g as Gordon DDM for consistency.
          */
-        const industryEpsGrowthRaw = (result?.growthDetails?.method === 'industry' &&
-                                      result?.growthDetails?.industryEpsGrowth != null)
-            ? result.growthDetails.industryEpsGrowth / 100   // convert % → decimal
-            : null;
-
-        const earningsGrowthRate = industryEpsGrowthRaw ?? result?.dividendGrowth ?? 0;
+        const earningsGrowthRate = result?.dividendGrowth ?? 0;
         const earningsYield      = result?.eps > 0 ? result.eps / result.currentPrice : null;
         const earningsYieldReturn = earningsYield != null ? earningsYield + earningsGrowthRate : null;
 
@@ -621,7 +733,7 @@
                             {[
                                 { title:'CAPM — Hurdle Rate', color:'var(--blue)', formula:'E(R) = Rf + β(Rm − Rf)', desc:'Risk-adjusted required return. Every signal must clear this bar.' },
                                 { title:'Gordon DDM', color:'var(--bull)', formula:'E(R) = (D₁/P₀) + g', desc:'Uses perpetuity growth (g). Needs consistent dividends. Gordon > CAPM → undervalued.' },
-                                { title:'Earnings Yield + g', color:'var(--gold)', formula:'E(R) = (EPS/P₀) + g_industry', desc:'Uses raw Damodaran industry EPS growth (analyst 5yr). Wider coverage — works without dividends.' },
+                                { title:'Earnings Yield + g', color:'var(--gold)', formula:'E(R) = (EPS/P₀) + g', desc:'Uses same perpetuity growth (g) as Gordon DDM. Wider coverage — works without dividends.' },
                             ].map(f => (
                                 <div key={f.title} style={{ background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'10px', padding:'12px' }}>
                                     <div style={{ color:f.color, fontWeight:600, fontSize:'0.78rem', marginBottom:'5px', fontFamily:'var(--mono)' }}>{f.title}</div>
@@ -631,7 +743,7 @@
                             ))}
                             <p style={{ gridColumn:'1/-1', fontSize:'0.73rem', color:'var(--text-secondary)', fontStyle:'italic', margin:0 }}>
                                 ⚠ Gordon Model requires consistent dividend payments. Best for mature income-paying companies.<br/>
-                                Earnings Yield uses <strong style={{color:'#fff'}}>industry EPS growth</strong> (separate from the perpetuity g used in Gordon DDM).
+                                Earnings Yield uses the same <strong style={{color:'#fff'}}>perpetuity g</strong> as Gordon DDM — consistent, conservative growth assumption.
                             </p>
                         </div>
                     )}
@@ -766,7 +878,7 @@
 
                             {/* ── WARNINGS ── */}
                             {result.lowDividendWarning && (
-                                <div className="warn-box a1">
+                                <div className="warn-box aL1">
                                     <div style={{color:'var(--gold)',flexShrink:0,marginTop:'1px'}}><IconWarn/></div>
                                     <p style={{color:'var(--gold)',fontSize:'0.85rem',margin:0,lineHeight:1.5}}>{result.lowDividendWarning}</p>
                                 </div>
@@ -779,7 +891,7 @@
                             )}
 
                             {/* ── RETURN SIGNALS ── */}
-                            <div className="card a1" style={{ padding:'20px 22px' }}>
+                            <div className="card aL1" style={{ padding:'20px 22px' }}>
                                 <div className="section-label" style={{ marginBottom:'18px' }}>Return Signal Comparison</div>
 
                                 <CAPMBar
@@ -806,26 +918,14 @@
                                     disabled={!hasEarnings}
                                     disabledMsg={!hasEarnings ? 'EPS ≤ 0 — Earnings Yield unavailable (loss-making company)' : null}
                                     formula={hasEarnings
-                                        ? `(${fmt(result.eps,result.currency)} EPS / ${fmt(result.currentPrice,result.currency)}) + ${(earningsGrowthRate*100).toFixed(2)}% ${industryEpsGrowthRaw!=null?'industry EPS growth':'g fallback'}`
+                                        ? `(${fmt(result.eps,result.currency)} EPS / ${fmt(result.currentPrice,result.currency)}) + ${(earningsGrowthRate*100).toFixed(2)}% g (perpetuity)`
                                         : null}
                                 />
 
-                                {/* Growth rate note */}
-                                <div style={{ background:'rgba(255,255,255,0.025)', borderRadius:'8px', padding:'10px 14px', marginTop:'4px' }}>
-                                    <p style={{ fontSize:'0.75rem', color:'var(--text-secondary)', margin:0, lineHeight:1.6 }}>
-                                        <span style={{color:'#fff',fontWeight:600}}>Growth rate distinction:</span>{' '}
-                                        <span style={{fontFamily:'var(--mono)',color:'var(--purple)'}}>{(result.dividendGrowth*100).toFixed(2)}% g (perpetuity)</span>
-                                        {' '}is used in Gordon DDM.{' '}
-                                        {industryEpsGrowthRaw != null
-                                            ? <><span style={{fontFamily:'var(--mono)',color:'var(--gold)'}}>{(industryEpsGrowthRaw*100).toFixed(2)}% industry EPS growth</span>{' '}(Damodaran 5yr analyst estimate) is used in Earnings Yield.</>
-                                            : <span style={{color:'var(--text-secondary)'}}>No industry EPS data — Earnings Yield uses same g as Gordon.</span>
-                                        }
-                                    </p>
-                                </div>
                             </div>
 
                             {/* ── KEY METRICS ── */}
-                            <div className="card a2" style={{ padding:'20px 22px' }}>
+                            <div className="card aR2" style={{ padding:'20px 22px' }}>
                                 <div className="section-label" style={{ marginBottom:'14px' }}>Key Metrics</div>
                                 <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'9px' }}>
                                     {[
@@ -847,7 +947,6 @@
                                             <div className="metric-chip">
                                                 <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>EPS</div>
                                                 <div className="metric-val" style={{color:'var(--gold)'}}>{fmt(result.eps,result.currency)}</div>
-                                                {industryEpsGrowthRaw!=null && <div style={{fontSize:'0.67rem',color:'var(--text-dim)',marginTop:'3px'}}>Industry EPS growth: {(industryEpsGrowthRaw*100).toFixed(2)}%</div>}
                                             </div>
                                         )}
                                         {result.peRatio && (
@@ -862,7 +961,7 @@
                             </div>
 
                             {/* ── GROWTH BREAKDOWN ── */}
-                            <div className="card a3" style={{ overflow:'hidden' }}>
+                            <div className="card aL3" style={{ overflow:'hidden' }}>
                                 <div style={{ padding:'16px 22px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                                     <div className="section-label">g (perpetuity) Breakdown</div>
                                     {!overrideEnabled && (
@@ -943,7 +1042,7 @@
 
                             {/* ── P/E ANALYSIS ── */}
                             {result.peRatio && (
-                                <div className="card a3" style={{padding:'20px 22px'}}>
+                                <div className="card aR3" style={{padding:'20px 22px'}}>
                                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px'}}>
                                         <div className="section-label">P/E Ratio Analysis</div>
                                         {result.currency==='VND'&&<span style={{fontSize:'0.7rem',color:'var(--text-dim)'}}>VCI via vnstock</span>}
@@ -992,7 +1091,7 @@
                             )}
 
                             {/* ── INTERPRETATION ── */}
-                            <div className="card a4" style={{padding:'20px 22px'}}>
+                            <div className="card aL4" style={{padding:'20px 22px'}}>
                                 <div className="section-label" style={{marginBottom:'14px'}}>Interpretation</div>
                                 <p style={{color:'rgba(240,244,255,0.85)',fontSize:'0.88rem',lineHeight:1.78,margin:0}}>
                                     {isBull
@@ -1004,7 +1103,7 @@
 
                             {/* ── DATA SOURCES ── */}
                             {result.sources && (
-                                <div className="card a4" style={{padding:'16px 22px'}}>
+                                <div className="card aR4" style={{padding:'16px 22px'}}>
                                     <div className="section-label" style={{marginBottom:'11px'}}>Data Sources</div>
                                     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(195px,1fr))',gap:'5px 16px'}}>
                                         {Object.entries(result.sources).map(([k,v])=>(
@@ -1021,7 +1120,7 @@
                             )}
 
                             {/* ── ASSUMPTIONS ACCORDION ── */}
-                            <div className="card a5" style={{overflow:'hidden'}}>
+                            <div className="card aL5" style={{overflow:'hidden'}}>
                                 <button className="acc-btn" onClick={()=>setShowAssumptions(v=>!v)}>
                                     <span style={{display:'flex',alignItems:'center',gap:'6px'}}><IconInfo/> Model Assumptions &amp; Limitations</span>
                                     <IconChev open={showAssumptions}/>
@@ -1031,7 +1130,7 @@
                                         {[
                                             { t:'CAPM Assumptions', items:['Diversified portfolios — unsystematic risk eliminated','Single-period transaction horizon','Borrow/lend at risk-free rate — no friction','Perfect capital markets — no transaction costs','Homogeneous investor expectations'] },
                                             { t:'Gordon Growth Model Assumptions', items:['Company exists in perpetuity','Dividends grow at constant rate g forever','Required return kₑ must exceed g','Stable macro environment'] },
-                                            { t:'Earnings Yield Notes', items:['Uses raw Damodaran industry EPS growth (5yr analyst estimate), not the GDP-weighted perpetuity g','Provides broader coverage — valid even for non-dividend-paying stocks','Higher g reflects analyst optimism, not a perpetuity-safe rate'] },
+                                            { t:'Earnings Yield Notes', items:['Uses same GDP-weighted perpetuity g as Gordon DDM for consistency','Provides broader coverage — valid even for non-dividend-paying stocks','Primary signal when Gordon DDM unavailable (no dividend)'] },
                                             { t:'Key Limitations', items:['CAPM ignores transaction costs and market inefficiencies','Gordon DDM breaks down for irregular/zero-dividend payers','Neither model captures sentiment, news, or macro shocks'] },
                                         ].map(s=>(
                                             <div key={s.t}>
