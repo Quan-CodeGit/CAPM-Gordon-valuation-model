@@ -759,9 +759,9 @@
                     <div className="section-label" style={{ marginBottom:'10px' }}>Select Market</div>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px', marginBottom:'14px' }}>
                         {[
-                            { k:'VN', label:'Vietnam',      sm:'VN', flag:'https://images.emojiterra.com/twitter/v14.0/1024px/1f1fb-1f1f3.png', cls:'mkt-vn' },
-                            { k:'US', label:'United States', sm:'US', flag:'https://images.emojiterra.com/twitter/v13.1/512px/1f1fa-1f1f8.png', cls:'mkt-us' },
-                            { k:'AU', label:'Australia',    sm:'AU', flag:'https://images.emojiterra.com/twitter/v14.0/1024px/1f1e6-1f1fa.png', cls:'mkt-au' },
+                            { k:'VN', label:'Vietnam',      sm:'VN', flag:'/flags/vn.png', cls:'mkt-vn' },
+                            { k:'US', label:'United States', sm:'US', flag:'/flags/us.png', cls:'mkt-us' },
+                            { k:'AU', label:'Australia',    sm:'AU', flag:'/flags/au.png', cls:'mkt-au' },
                         ].map(m => (
                             <button key={m.k} onClick={() => setMarket(m.k)} disabled={loading}
                                 className={`market-btn ${market === m.k ? m.cls : ''}`}>
@@ -916,7 +916,7 @@
                                 />
 
                                 <SignalBar
-                                    label={`Earnings Yield + Industry EPS Growth${!hasGordon?' ★':''}`}
+                                    label={`Earnings Yield + g${!hasGordon?' ★':''}`}
                                     value={hasEarnings ? earningsYieldReturn : 0}
                                     capm={result.capmReturn}
                                     isPrimary={!hasGordon && hasEarnings}
