@@ -697,15 +697,22 @@
                     : result.valuation))
             : null;
 
-        /* ── Recommended tickers ────────────────────── */
+        /* ── Recommended tickers ─────────────────────────────────────────────
+         * Curated for Gordon DDM suitability:
+         *   VN  — HOSE blue-chips with consistent multi-year dividend track record
+         *   US  — S&P 500 Dividend Aristocrats (25+ consecutive years of increases)
+         *   AU  — ASX mature income stocks with stable franked dividend history
+         * ────────────────────────────────────────────────────────────────── */
         const RECS = {
-            VN: [['VNM','Vinamilk'],['VCB','Vietcombank'],['FPT','FPT Corp'],['HPG','Hoa Phat'],
-                 ['SAB','Sabeco'],['GAS','PVGas'],['TCB','Techcombank'],['MBB','Military Bank'],
-                 ['BVH','Bao Viet'],['PLX','Petrolimex'],['VHM','Vinhomes'],['MSN','Masan']],
-            US: [['JNJ','J&J'],['PG','P&G'],['KO','Coca-Cola'],['PEP','PepsiCo'],['XOM','ExxonMobil'],
-                 ['VZ','Verizon'],['T','AT&T'],['MCD','McDonald\'s'],['MMM','3M'],['KMB','Kimberly-Clark']],
-            AU: [['CBA','CommBank'],['NAB','NAB'],['WBC','Westpac'],['ANZ','ANZ'],['BHP','BHP'],
-                 ['RIO','Rio Tinto'],['WES','Wesfarmers'],['WOW','Woolworths'],['TLS','Telstra'],['CSL','CSL']],
+            VN: [['VNM','Vinamilk'],['SAB','Sabeco'],['GAS','PVGas'],['BVH','Bao Viet'],
+                 ['REE','REE Corp'],['DHG','DHG Pharma'],['PNJ','PNJ Gold'],['VCB','Vietcombank'],
+                 ['FPT','FPT Corp'],['DGW','Digiworld'],['MWG','Mobile World'],['PLX','Petrolimex']],
+            US: [['KO','Coca-Cola'],['PG','P&G'],['JNJ','J&J'],['PEP','PepsiCo'],
+                 ['MCD','McDonald\'s'],['WMT','Walmart'],['CL','Colgate'],['ABT','Abbott'],
+                 ['AFL','Aflac'],['EMR','Emerson'],['CAT','Caterpillar'],['KMB','Kimberly-Clark']],
+            AU: [['CBA','CommBank'],['NAB','NAB'],['WBC','Westpac'],['ANZ','ANZ'],
+                 ['WES','Wesfarmers'],['WOW','Woolworths'],['TLS','Telstra'],['APA','APA Group'],
+                 ['BHP','BHP'],['TCL','Transurban'],['MQG','Macquarie'],['CSL','CSL']],
         };
 
         const isBull = primaryValuation === 'UNDERVALUED';
@@ -772,7 +779,9 @@
                         ))}
                     </div>
                     <div className="section-label" style={{ marginBottom:'7px' }}>
-                        Popular {market==='VN'?'Vietnamese':market==='AU'?'Australian':'US'} dividend stocks
+                        {market==='US' ? 'Dividend Aristocrats — 25+ years consecutive increases'
+                         : market==='AU' ? 'ASX Mature Income Stocks — stable franked dividends'
+                         : 'HOSE Blue-Chips — consistent dividend track record'}
                     </div>
                     <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
                         {(RECS[market]||[]).map(([sym,name]) => (
@@ -784,7 +793,7 @@
                         ))}
                     </div>
                     {market==='AU' && <p style={{fontSize:'0.71rem',color:'var(--text-secondary)',marginTop:'6px',fontStyle:'italic'}}>Franking credits apply — unique tax benefit for Australian dividends</p>}
-                    {market==='US' && <p style={{fontSize:'0.71rem',color:'var(--text-secondary)',marginTop:'6px',fontStyle:'italic'}}>Dividend Aristocrats — 25+ years of consecutive increases</p>}
+                    {market==='VN' && <p style={{fontSize:'0.71rem',color:'var(--text-secondary)',marginTop:'6px',fontStyle:'italic'}}>Best suited for Gordon DDM — select mature firms with multi-year dividend history</p>}
                 </div>
 
                 {/* ── SEARCH ── */}
