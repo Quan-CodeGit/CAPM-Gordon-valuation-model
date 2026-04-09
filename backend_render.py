@@ -552,17 +552,48 @@ def get_dividend_growth(ticker, is_au_stock=False):
     except:
         return 0.03
 
-def get_risk_free_rate():
-    """Get US 10Y Treasury rate"""
+def get_risk_free_rate(market='US'):
+    """
+    Fetch the 10-year government bond yield for the given market from TradingView (TVC).
+      US  → TVC:US10Y   (fallback: yfinance ^TNX, then 0.042)
+      AU  → TVC:AU10Y   (fallback: 0.045)
+      VN  → TVC:VN10Y   (fallback: 0.040)
+    Returns a decimal (e.g. 0.0494 for 4.94%).
+    """
+    FALLBACKS = {'US': 0.042, 'AU': 0.045, 'VN': 0.040}
+    TVC_SYMBOLS = {'US': 'TVC:US10Y', 'AU': 'TVC:AU10Y', 'VN': 'TVC:VN10Y'}
+
+    # 1. Try TradingView TVC bond
     try:
-        import yfinance as yf
-        treasury = yf.Ticker("^TNX")
-        data = treasury.history(period="5d")
-        if not data.empty:
-            return data['Close'].iloc[-1] / 100
-    except:
-        pass
-    return 0.042
+        from tradingview_scraper.symbols.overview import Overview
+        symbol = TVC_SYMBOLS.get(market, 'TVC:US10Y')
+        overview = Overview()
+        result = overview.get_symbol_overview(symbol=symbol)
+        if result and 'data' in result:
+            close = result['data'].get('close') or result['data'].get('last_bar_close')
+            if close and float(close) > 0:
+                rate = float(close) / 100   # TVC yields are in % (e.g. 4.937 → 0.04937)
+                print(f"[RFR] {symbol} = {rate*100:.3f}% (TradingView TVC)")
+                return rate
+    except Exception as e:
+        print(f"[RFR] TradingView TVC fetch failed for {market}: {e}")
+
+    # 2. US fallback: yfinance ^TNX
+    if market == 'US':
+        try:
+            import yfinance as yf
+            treasury = yf.Ticker("^TNX")
+            data = treasury.history(period="5d")
+            if not data.empty:
+                rate = data['Close'].iloc[-1] / 100
+                print(f"[RFR] ^TNX (yfinance) = {rate*100:.3f}%")
+                return rate
+        except Exception as e:
+            print(f"[RFR] yfinance ^TNX fallback failed: {e}")
+
+    fallback = FALLBACKS.get(market, 0.042)
+    print(f"[RFR] Using hardcoded fallback for {market}: {fallback*100:.2f}%")
+    return fallback
 
 def _require_admin_key():
     key = request.headers.get('X-Admin-Key', '')
@@ -698,7 +729,7 @@ def get_valuation(ticker):
             else:
                 return jsonify({'error': f'Stock {ticker} not found on TradingView or in database'}), 400
 
-            risk_free_rate = 0.0416
+            risk_free_rate = get_risk_free_rate('VN')
             market_return = 0.09
             currency = 'VND'
         else:
@@ -765,7 +796,7 @@ def get_valuation(ticker):
                     pe_ratio = None
 
             dividend_growth = get_dividend_growth(ticker, is_au_stock)
-            risk_free_rate = get_risk_free_rate()
+            risk_free_rate = get_risk_free_rate('AU' if is_au_stock else 'US')
 
             if is_au_stock:
                 market_return = 0.095
@@ -915,7 +946,7 @@ def get_valuation(ticker):
             'growthSource': industry_growth_info.get('source', 'Historical dividends') if industry_growth_info else 'Historical dividends',
             'sources': {
                 'beta': source,
-                'riskFreeRate': 'US 10-Year Treasury',
+                'riskFreeRate': {'US': 'US10Y Treasury (TVC)', 'AU': 'AU10Y Gov Bond (TVC)', 'VN': 'VN10Y Gov Bond (TVC)'}.get(market, 'Gov Bond 10Y'),
                 'marketReturn': 'Historical Average',
                 'currentPrice': source,
                 'dividend': source,
