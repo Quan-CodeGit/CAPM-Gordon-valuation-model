@@ -686,6 +686,10 @@
         const earningsYield      = result?.eps > 0 ? result.eps / result.currentPrice : null;
         const earningsYieldReturn = earningsYield != null ? earningsYield + earningsGrowthRate : null;
 
+        // Distinguish: eps===null means data unavailable; eps<=0 means negative/zero earnings
+        const epsUnavailable = result && (result.eps === null || result.eps === undefined);
+        const epsNegative    = result && result.eps !== null && result.eps !== undefined && result.eps <= 0;
+
         const hasGordon   = result && result.dividend > 0;
         const hasEarnings = earningsYieldReturn != null;
 
@@ -930,7 +934,11 @@
                                     capm={result.capmReturn}
                                     isPrimary={!hasGordon && hasEarnings}
                                     disabled={!hasEarnings}
-                                    disabledMsg={!hasEarnings ? 'EPS ≤ 0 — Earnings Yield unavailable (loss-making company)' : null}
+                                    disabledMsg={!hasEarnings
+                                        ? (epsUnavailable
+                                            ? 'EPS data unavailable for this stock'
+                                            : 'EPS ≤ 0 — Earnings Yield not applicable (negative earnings)')
+                                        : null}
                                     formula={hasEarnings
                                         ? `(${fmt(result.eps,result.currency)} EPS / ${fmt(result.currentPrice,result.currency)}) + ${(earningsGrowthRate*100).toFixed(2)}% g (perpetuity)`
                                         : null}
@@ -942,36 +950,76 @@
                             <div className="card aR2" style={{ padding:'20px 22px' }}>
                                 <div className="section-label" style={{ marginBottom:'14px' }}>Key Metrics</div>
                                 <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'9px' }}>
-                                    {[
-                                        { label:'Beta (β)', val:result.beta.toFixed(3), note:'Market sensitivity', color:'var(--blue)' },
-                                        { label:'Risk-Free Rate', val:(result.riskFreeRate*100).toFixed(2)+'%', note:'Gov. bond proxy', color:'var(--blue)' },
-                                        { label:'Annual Dividend D₀', val:fmt(result.dividend,result.currency), note:'Last 12 months', color:'var(--bull)' },
-                                        { label:'g (perpetuity)', val:(result.dividendGrowth*100).toFixed(2)+'%', note: result.growthDetails?.method==='industry'?'Damodaran GDP×weight': result.growthDetails?.method==='override'?'Manual override':'Hist. CAGR', color:'var(--purple)' },
-                                    ].map(m => (
-                                        <div key={m.label} className="metric-chip">
-                                            <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>{m.label}</div>
-                                            <div className="metric-val" style={{ color:m.color }}>{m.val}</div>
-                                            <div style={{ fontSize:'0.67rem', color:'var(--text-dim)', marginTop:'3px' }}>{m.note}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                                {(result.eps || result.peRatio) && (
-                                    <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'9px', marginTop:'9px' }}>
-                                        {result.eps && (
-                                            <div className="metric-chip">
-                                                <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>EPS</div>
-                                                <div className="metric-val" style={{color:'var(--gold)'}}>{fmt(result.eps,result.currency)}</div>
-                                            </div>
-                                        )}
-                                        {result.peRatio && (
-                                            <div className="metric-chip">
-                                                <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>Actual P/E Ratio</div>
-                                                <div className="metric-val" style={{color:'var(--blue)'}}>{result.peRatio.toFixed(2)}×</div>
-                                                {result.theoreticalPE && <div style={{fontSize:'0.67rem',color:'var(--text-dim)',marginTop:'3px'}}>Theoretical P/E: {result.theoreticalPE.toFixed(2)}×</div>}
-                                            </div>
-                                        )}
+                                    {/* Beta chip — flag when estimated */}
+                                    <div className="metric-chip">
+                                        <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>Beta (β)</div>
+                                        {result.betaEstimated
+                                            ? <>
+                                                <div className="metric-val" style={{ color:'var(--text-dim)' }}>No data</div>
+                                                <div style={{ fontSize:'0.67rem', color:'var(--gold)', marginTop:'3px' }}>Using β=1.0 (market avg)</div>
+                                              </>
+                                            : <>
+                                                <div className="metric-val" style={{ color:'var(--blue)' }}>{result.beta.toFixed(3)}</div>
+                                                <div style={{ fontSize:'0.67rem', color:'var(--text-dim)', marginTop:'3px' }}>Market sensitivity</div>
+                                              </>
+                                        }
                                     </div>
-                                )}
+                                    {/* Risk-free rate */}
+                                    <div className="metric-chip">
+                                        <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>Risk-Free Rate</div>
+                                        <div className="metric-val" style={{ color:'var(--blue)' }}>{(result.riskFreeRate*100).toFixed(2)}%</div>
+                                        <div style={{ fontSize:'0.67rem', color:'var(--text-dim)', marginTop:'3px' }}>Gov. bond proxy</div>
+                                    </div>
+                                    {/* Dividend */}
+                                    <div className="metric-chip">
+                                        <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>Annual Dividend D₀</div>
+                                        <div className="metric-val" style={{ color:'var(--bull)' }}>{fmt(result.dividend, result.currency)}</div>
+                                        <div style={{ fontSize:'0.67rem', color:'var(--text-dim)', marginTop:'3px' }}>Last 12 months</div>
+                                    </div>
+                                    {/* g */}
+                                    <div className="metric-chip">
+                                        <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>g (perpetuity)</div>
+                                        <div className="metric-val" style={{ color:'var(--purple)' }}>{(result.dividendGrowth*100).toFixed(2)}%</div>
+                                        <div style={{ fontSize:'0.67rem', color:'var(--text-dim)', marginTop:'3px' }}>
+                                            {result.growthDetails?.method==='industry' ? 'Damodaran GDP×weight'
+                                             : result.growthDetails?.method==='override' ? 'Manual override'
+                                             : 'Hist. CAGR'}
+                                        </div>
+                                    </div>
+                                </div>
+                                {/* EPS + P/E row — always show EPS chip, even when unavailable */}
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'9px', marginTop:'9px' }}>
+                                    <div className="metric-chip">
+                                        <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>EPS</div>
+                                        {epsUnavailable
+                                            ? <>
+                                                <div className="metric-val" style={{ color:'var(--text-dim)' }}>No data</div>
+                                                <div style={{ fontSize:'0.67rem', color:'var(--text-secondary)', marginTop:'3px' }}>Not available from source</div>
+                                              </>
+                                            : epsNegative
+                                            ? <>
+                                                <div className="metric-val" style={{ color:'var(--bear)' }}>{fmt(result.eps, result.currency)}</div>
+                                                <div style={{ fontSize:'0.67rem', color:'var(--bear)', marginTop:'3px' }}>Negative earnings</div>
+                                              </>
+                                            : <>
+                                                <div className="metric-val" style={{ color:'var(--gold)' }}>{fmt(result.eps, result.currency)}</div>
+                                              </>
+                                        }
+                                    </div>
+                                    <div className="metric-chip">
+                                        <div style={{ fontSize:'0.7rem', color:'var(--text-secondary)', marginBottom:'4px' }}>Actual P/E Ratio</div>
+                                        {result.peRatio
+                                            ? <>
+                                                <div className="metric-val" style={{ color:'var(--blue)' }}>{result.peRatio.toFixed(2)}×</div>
+                                                {result.theoreticalPE && <div style={{ fontSize:'0.67rem', color:'var(--text-dim)', marginTop:'3px' }}>Theoretical P/E: {result.theoreticalPE.toFixed(2)}×</div>}
+                                              </>
+                                            : <>
+                                                <div className="metric-val" style={{ color:'var(--text-dim)' }}>No data</div>
+                                                <div style={{ fontSize:'0.67rem', color:'var(--text-secondary)', marginTop:'3px' }}>Not available from source</div>
+                                              </>
+                                        }
+                                    </div>
+                                </div>
                             </div>
 
                             {/* ── GROWTH BREAKDOWN ── */}

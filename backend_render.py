@@ -425,9 +425,16 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         beta_raw = (data.get('beta_1_year') or data.get('beta_5_year') or
                     data.get('beta_3_year') or data.get('beta'))
         try:
-            beta = float(beta_raw) if beta_raw and float(beta_raw) > 0 else 1.0
+            beta_val = float(beta_raw) if beta_raw else 0.0
+            if beta_val > 0:
+                beta = beta_val
+                beta_estimated = False
+            else:
+                beta = 1.0
+                beta_estimated = True   # no real beta data — using market-average assumption
         except (ValueError, TypeError):
             beta = 1.0
+            beta_estimated = True
 
         # ── Dividend ──────────────────────────────────────────────────────────
         dividend_yield_percent = data.get('dividends_yield') or 0
@@ -461,12 +468,13 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         return {
             'currentPrice': current_price,
             'beta': beta,
+            'betaEstimated': beta_estimated,   # True = no real beta; 1.0 is market-avg assumption
             'companyName': company_name,
             'dividend': dividend_rate,
             'hasFYDividend': has_fy_dividend,
             'dividendYield': dividend_yield,
             'peRatio': pe_ratio,
-            'eps': eps,
+            'eps': eps,                         # None = unavailable; negative = loss-making
             'source': f'TradingView ({exchange}:{ticker})',
             'tvSector': tv_sector,
             'tvIndustry': tv_industry,
@@ -690,6 +698,7 @@ def get_valuation(ticker):
                 # Use TradingView data
                 current_price = tv_data['currentPrice']
                 beta = tv_data['beta']
+                beta_estimated = tv_data.get('betaEstimated', False)
                 company_name = tv_data['companyName']
                 source = tv_data['source']
 
@@ -730,6 +739,7 @@ def get_valuation(ticker):
                 fallback = DIVIDEND_FALLBACK_VN[ticker]
                 current_price = fallback['price']
                 beta = fallback['beta']
+                beta_estimated = True   # fallback DB beta — treat as estimated
                 dividend_rate = fallback['dividend']
                 dividend_growth = fallback['growth']
                 company_name = fallback['name']
@@ -751,6 +761,7 @@ def get_valuation(ticker):
 
             current_price = tv_data['currentPrice']
             beta = tv_data['beta']
+            beta_estimated = tv_data.get('betaEstimated', False)
             company_name = tv_data['companyName']
             source = tv_data['source']
 
@@ -913,6 +924,7 @@ def get_valuation(ticker):
             'ticker': ticker,
             'companyName': company_name,
             'beta': round(float(beta), 3),
+            'betaEstimated': beta_estimated,
             'riskFreeRate': round(float(risk_free_rate), 4),
             'marketReturn': round(float(market_return), 4),
             'currentPrice': round(float(current_price), 2),
