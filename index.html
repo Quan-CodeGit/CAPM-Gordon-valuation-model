@@ -793,7 +793,7 @@
                         ))}
                     </div>
                     {market==='AU' && <p style={{fontSize:'0.71rem',color:'var(--text-secondary)',marginTop:'6px',fontStyle:'italic'}}>Franking credits apply — unique tax benefit for Australian dividends</p>}
-                    {market==='VN' && <p style={{fontSize:'0.71rem',color:'var(--text-secondary)',marginTop:'6px',fontStyle:'italic'}}>Best suited for Gordon DDM — select mature firms with multi-year dividend history</p>}
+                    {market==='VN' && <p style={{fontSize:'0.71rem',color:'var(--text-secondary)',marginTop:'6px',fontStyle:'italic'}}>Covers HOSE · HNX · UPCOM — enter any Vietnamese stock ticker</p>}
                 </div>
 
                 {/* ── SEARCH ── */}
@@ -817,7 +817,7 @@
                             onChange={e=>setTicker(e.target.value.toUpperCase())}
                             onKeyDown={e=>e.key==='Enter'&&calculateValuation()}
                             className="ticker-input" disabled={loading}
-                            placeholder={market==='VN'?'VNM, VCB, FPT …':market==='AU'?'CBA, BHP, CSL …':'AAPL, MSFT, GOOGL …'}
+                            placeholder={market==='VN'?'VNM, VCB, FPT, SHB, IDC …':market==='AU'?'CBA, BHP, CSL …':'AAPL, MSFT, GOOGL …'}
                             style={{flex:1}}/>
                         <button onClick={()=>calculateValuation()} disabled={loading} className="btn-analyze">
                             {loading ? 'Analyzing…' : 'Analyze ↵'}

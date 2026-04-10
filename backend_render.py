@@ -374,7 +374,7 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         from tradingview_scraper.symbols.overview import Overview
 
         if is_vn_stock:
-            exchanges = ['HOSE', 'HNX']
+            exchanges = ['HOSE', 'HNX', 'UPCOM']
         elif is_au_stock:
             exchanges = ['ASX']
         else:
