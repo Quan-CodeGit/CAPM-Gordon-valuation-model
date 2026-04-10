@@ -396,12 +396,16 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         if not data:
             return None
 
-        # Debug: Print all available fields for VN stocks
+        # Debug: log all key field groups for VN stocks (covers HOSE / HNX / UPCOM)
         if is_vn_stock:
-            eps_fields = {k: data.get(k) for k in data.keys() if 'eps' in k.lower() or 'earning' in k.lower()}
-            pe_fields = {k: data.get(k) for k in data.keys() if 'p/e' in k.lower() or 'pe' in k.lower() or 'price_earning' in k.lower()}
-            print(f"[DEBUG TV] {ticker} EPS-related fields: {eps_fields}")
-            print(f"[DEBUG TV] {ticker} P/E-related fields: {pe_fields}")
+            eps_fields  = {k: data.get(k) for k in data.keys() if 'eps' in k.lower() or 'earning' in k.lower()}
+            pe_fields   = {k: data.get(k) for k in data.keys() if 'p/e' in k.lower() or 'pe' in k.lower() or 'price_earning' in k.lower()}
+            beta_fields = {k: data.get(k) for k in data.keys() if 'beta' in k.lower()}
+            div_fields  = {k: data.get(k) for k in data.keys() if 'div' in k.lower() or 'yield' in k.lower()}
+            print(f"[DEBUG TV] {ticker} ({exchange}) beta fields : {beta_fields}")
+            print(f"[DEBUG TV] {ticker} ({exchange}) EPS fields  : {eps_fields}")
+            print(f"[DEBUG TV] {ticker} ({exchange}) P/E fields  : {pe_fields}")
+            print(f"[DEBUG TV] {ticker} ({exchange}) div fields  : {div_fields}")
 
         # Extract sector/industry classification from TradingView
         tv_sector = data.get('sector', None) or data.get('type_specific', None)
@@ -413,36 +417,42 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         print(f"[DEBUG TV] {ticker} sector={tv_sector!r}, industry={tv_industry!r}")
 
         current_price = data.get('close', 0)
-        beta = data.get('beta_1_year', 1.0)
         company_name = data.get('description', ticker)
-        dividend_yield_percent = data.get('dividends_yield', 0)
+
+        # ── Beta ──────────────────────────────────────────────────────────────
+        # TradingView returns 0.0 (not None) for thinly-traded UPCOM/HNX stocks.
+        # Fallback chain: beta_1_year → beta_5_year → beta_3_year → beta → 1.0
+        beta_raw = (data.get('beta_1_year') or data.get('beta_5_year') or
+                    data.get('beta_3_year') or data.get('beta'))
+        try:
+            beta = float(beta_raw) if beta_raw and float(beta_raw) > 0 else 1.0
+        except (ValueError, TypeError):
+            beta = 1.0
+
+        # ── Dividend ──────────────────────────────────────────────────────────
+        dividend_yield_percent = data.get('dividends_yield') or 0
         div_per_share_fy = data.get('dividends_per_share_fy', None)
         pe_ratio = data.get('price_earnings_ttm', None)
 
-        # Get EPS from TradingView
-        # IMPORTANT: For VN stocks, TradingView API returns EPS in USD (not VND)
-        # e.g., VCB EPS = 0.16 USD = ~4,210 VND. Must convert using exchange rate.
+        # ── EPS ───────────────────────────────────────────────────────────────
+        # IMPORTANT: For VN stocks TradingView returns EPS in USD → must convert to VND later.
         eps_diluted_ttm = data.get('earnings_per_share_diluted_ttm', None)
-        eps_basic_ttm = data.get('earnings_per_share_basic_ttm', None)
-        eps_fq = data.get('earnings_per_share_fq', None)
+        eps_basic_ttm   = data.get('earnings_per_share_basic_ttm', None)
+        eps_fq          = data.get('earnings_per_share_fq', None)
+        eps_fy          = data.get('earnings_per_share_diluted_fy', None) or data.get('earnings_per_share_basic_fy', None)
 
         if is_vn_stock:
-            # For VN stocks, pick the best TTM EPS (in USD), prefer basic over diluted
-            # TradingView sometimes returns None for diluted on VN stocks
-            candidates = [v for v in [eps_diluted_ttm, eps_basic_ttm] if v and v > 0]
-            eps = max(candidates) if candidates else None
-            print(f"[DEBUG TV] {ticker} EPS (USD): diluted_ttm={eps_diluted_ttm}, basic_ttm={eps_basic_ttm} → chosen={eps}")
+            # Try TTM first (diluted > basic), then FY, then quarterly — all in USD
+            candidates = [v for v in [eps_diluted_ttm, eps_basic_ttm, eps_fy, eps_fq] if v and float(v) > 0]
+            eps = float(max(candidates)) if candidates else None
+            print(f"[DEBUG TV] {ticker} EPS (USD): diluted={eps_diluted_ttm}, basic={eps_basic_ttm}, fy={eps_fy}, fq={eps_fq} → chosen={eps}")
         else:
-            eps = eps_diluted_ttm
-            if not eps:
-                eps = eps_basic_ttm
-            if not eps:
-                eps = eps_fq
+            eps = eps_diluted_ttm or eps_basic_ttm or eps_fq
 
-        dividend_yield = dividend_yield_percent / 100 if dividend_yield_percent else 0
+        dividend_yield = float(dividend_yield_percent) / 100 if dividend_yield_percent else 0
 
-        if div_per_share_fy and div_per_share_fy > 0:
-            dividend_rate = div_per_share_fy
+        if div_per_share_fy and float(div_per_share_fy) > 0:
+            dividend_rate = float(div_per_share_fy)
             has_fy_dividend = True
         else:
             dividend_rate = current_price * dividend_yield if dividend_yield else 0
@@ -450,7 +460,7 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
 
         return {
             'currentPrice': current_price,
-            'beta': beta if beta is not None else 1.0,
+            'beta': beta,
             'companyName': company_name,
             'dividend': dividend_rate,
             'hasFYDividend': has_fy_dividend,
