@@ -11,7 +11,8 @@ from datetime import datetime
 import pandas as pd
 from damodaran_db import (
     init_db, get_industries, get_benchmark, get_config,
-    calculate_industry_growth, update_damodaran_data, get_damodaran_status
+    calculate_industry_growth, update_damodaran_data, get_damodaran_status,
+    refresh_regional_data,
 )
 
 ADMIN_KEY = os.environ.get('ADMIN_KEY', 'dev-key-change-in-production')
@@ -19,6 +20,21 @@ ADMIN_KEY = os.environ.get('ADMIN_KEY', 'dev-key-change-in-production')
 app = Flask(__name__)
 CORS(app)
 init_db()
+
+# ── Startup: download regional Damodaran Excel files in background ──────────
+# Non-blocking — app starts serving requests immediately; data loads in ~30s.
+import threading
+
+def _startup_damodaran_refresh():
+    try:
+        report = refresh_regional_data()
+        totals = {r: {d: v['count'] for d, v in ds.items()}
+                  for r, ds in report.items()}
+        print(f'[STARTUP] Damodaran regional refresh complete: {totals}')
+    except Exception as e:
+        print(f'[STARTUP] Damodaran regional refresh failed (non-fatal): {e}')
+
+threading.Thread(target=_startup_damodaran_refresh, daemon=True).start()
 
 # Cache results
 _cache = {}
@@ -670,6 +686,24 @@ def update_damodaran():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/admin/refresh-damodaran', methods=['POST'])
+def admin_refresh_damodaran():
+    """
+    Download and cache all 6 Damodaran regional Excel files:
+      US / Australia / Emerging  ×  fundamental (fundgr) / historical (histgr)
+    Requires X-Admin-Key header.
+    """
+    auth_err = _require_admin_key()
+    if auth_err:
+        return auth_err
+    try:
+        report = refresh_regional_data()
+        totals = {r: {d: v for d, v in ds.items()} for r, ds in report.items()}
+        return jsonify({'status': 'ok', 'report': totals})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/valuation/<ticker>', methods=['GET'])
 def get_valuation(ticker):
     try:
@@ -959,6 +993,11 @@ def get_valuation(ticker):
                 'note': industry_growth_info.get('note') if industry_growth_info else None,
                 'damodaranYear': 2026,
                 'source': industry_growth_info.get('source', 'Historical dividends') if industry_growth_info else 'Historical dividends',
+                # Two-g split (Option B): Earnings Yield uses histgr 5yr EPS forecast
+                'earningsYieldGrowth': industry_growth_info.get('earnings_yield_g') if industry_growth_info else None,
+                'earningsYieldGrowthSource': industry_growth_info.get('earnings_yield_g_source') if industry_growth_info else None,
+                'usingRegionalData': industry_growth_info.get('using_regional_data', False) if industry_growth_info else False,
+                'region': industry_growth_info.get('region') if industry_growth_info else None,
             } if industry_growth_info else None,
             'industryName': industry_growth_info.get('industryName') if industry_growth_info else None,
             'autoDetectedIndustry': auto_detected_industry,

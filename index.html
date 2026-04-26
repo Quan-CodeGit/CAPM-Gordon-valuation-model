@@ -682,7 +682,12 @@
         /* ── Derived: Earnings Yield + g ──
          * Uses same adjusted perpetuity g as Gordon DDM for consistency.
          */
-        const earningsGrowthRate = result?.dividendGrowth ?? 0;
+        // Two-g split (Option B): Earnings Yield uses histgr 5yr EPS growth;
+        // Gordon DDM uses fundgr ROE×b (stored in dividendGrowth).
+        // Falls back to dividendGrowth when regional data hasn't loaded yet.
+        const earningsGrowthRate = result?.growthDetails?.earningsYieldGrowth
+            ?? result?.dividendGrowth
+            ?? 0;
         const earningsYield      = result?.eps > 0 ? result.eps / result.currentPrice : null;
         const earningsYieldReturn = earningsYield != null ? earningsYield + earningsGrowthRate : null;
 
