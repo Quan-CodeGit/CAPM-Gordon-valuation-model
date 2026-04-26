@@ -1040,35 +1040,137 @@
                                 </div>
                                 <hr className="sep"/>
                                 <div style={{ padding:'16px 22px' }}>
-                                    {result.growthDetails?.method === 'industry' ? (
-                                        <div>
-                                            {[
-                                                { k:'Damodaran Industry (auto-detected)', v:result.growthDetails.industryName, vColor:'#fff' },
-                                                result.tvSector || result.tvIndustry
-                                                    ? { k:'TradingView classification', v:[result.tvIndustry,result.tvSector].filter(Boolean).join(' · '), vColor:'var(--text-secondary)', small:true }
-                                                    : null,
-                                                { k:'Industry EPS Growth — 5yr (analyst)', v: result.growthDetails.industryEpsGrowth!=null ? Number(result.growthDetails.industryEpsGrowth).toFixed(2)+'%' : 'N/A', vColor:'var(--gold)' },
-                                                { k:'Benchmark Total Market EPS Growth', v: result.growthDetails.benchmarkEpsGrowth!=null ? Number(result.growthDetails.benchmarkEpsGrowth).toFixed(2)+'%' : 'N/A', vColor:'var(--text-secondary)' },
-                                                { k:'Weight = Industry ÷ Benchmark', v: result.growthDetails.weight!=null ? Number(result.growthDetails.weight).toFixed(4) : 'N/A', vColor:'var(--text-secondary)' },
-                                                { k:`GDP Base (${result.currency})`, v: result.growthDetails.gdpBase!=null ? (Number(result.growthDetails.gdpBase)*100).toFixed(1)+'%' : 'N/A', vColor:'var(--text-secondary)' },
-                                            ].filter(Boolean).map(row => (
-                                                <div key={row.k} className="data-row">
-                                                    <span className="data-key" style={{fontSize:row.small?'0.75rem':undefined}}>{row.k}</span>
-                                                    <span className="data-val" style={{color:row.vColor,fontSize:row.small?'0.75rem':undefined}}>{row.v}</span>
+                                    {result.growthDetails?.method === 'industry' ? (() => {
+                                        const gd = result.growthDetails;
+                                        const gdpPct = gd.gdpBase != null ? (Number(gd.gdpBase)*100).toFixed(1)+'%' : 'N/A';
+                                        const useRegional = gd.usingRegionalData;
+
+                                        // Shared header rows (industry + TV classification)
+                                        const HeaderRows = () => (
+                                            <div style={{marginBottom:'12px'}}>
+                                                <div className="data-row">
+                                                    <span className="data-key">Industry (auto-detected)</span>
+                                                    <span className="data-val" style={{color:'#fff',fontWeight:600}}>{gd.industryName}</span>
                                                 </div>
-                                            ))}
-                                            <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid rgba(255,255,255,0.07)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                                                <span style={{color:'#fff',fontWeight:600,fontSize:'0.87rem'}}>
-                                                    g (perpetuity) = GDP × Weight{result.growthDetails.capped?' (capped)':''}
-                                                </span>
-                                                <span style={{fontFamily:'var(--mono)',color:'var(--purple)',fontWeight:600,fontSize:'1.05rem'}}>{(result.dividendGrowth*100).toFixed(2)}%</span>
+                                                {(result.tvSector||result.tvIndustry) && (
+                                                    <div className="data-row">
+                                                        <span className="data-key" style={{fontSize:'0.74rem'}}>TradingView classification</span>
+                                                        <span className="data-val" style={{color:'var(--text-secondary)',fontSize:'0.74rem'}}>{[result.tvIndustry,result.tvSector].filter(Boolean).join(' · ')}</span>
+                                                    </div>
+                                                )}
+                                                {useRegional && (
+                                                    <div className="data-row">
+                                                        <span className="data-key" style={{fontSize:'0.72rem'}}>Damodaran region</span>
+                                                        <span className="data-val" style={{color:'var(--blue)',fontSize:'0.72rem'}}>{gd.region} regional dataset</span>
+                                                    </div>
+                                                )}
                                             </div>
-                                            {result.growthDetails.note && (
-                                                <p style={{color:'var(--text-secondary)',fontSize:'0.74rem',fontStyle:'italic',margin:'8px 0 0'}}>{result.growthDetails.note}</p>
-                                            )}
-                                            <p style={{color:'var(--text-dim)',fontSize:'0.7rem',margin:'6px 0 0'}}>Source: Damodaran NYU Stern {result.growthDetails.damodaranYear||2026}</p>
-                                        </div>
-                                    ) : result.growthDetails?.method === 'override' ? (
+                                        );
+
+                                        // Single column row helper
+                                        const Row = ({k,v,vColor,small}) => (
+                                            <div className="data-row">
+                                                <span className="data-key" style={{fontSize:small?'0.74rem':undefined}}>{k}</span>
+                                                <span className="data-val" style={{color:vColor,fontSize:small?'0.74rem':undefined}}>{v}</span>
+                                            </div>
+                                        );
+
+                                        // Column panel for one g calculation
+                                        const GPanel = ({title, badge, badgeColor, rows, gLabel, gValue, gNote, isCapped, accentColor}) => (
+                                            <div style={{
+                                                background:'rgba(255,255,255,0.03)',
+                                                border:`1px solid ${accentColor}33`,
+                                                borderRadius:'10px',
+                                                padding:'12px 14px',
+                                                display:'flex', flexDirection:'column', gap:'0'
+                                            }}>
+                                                {/* panel header */}
+                                                <div style={{display:'flex',alignItems:'center',gap:'7px',marginBottom:'10px',paddingBottom:'8px',borderBottom:`1px solid ${accentColor}22`}}>
+                                                    <span style={{color:accentColor,fontWeight:700,fontSize:'0.8rem'}}>{title}</span>
+                                                    <span style={{background:`${accentColor}22`,color:badgeColor,fontSize:'0.65rem',padding:'1px 6px',borderRadius:'4px',fontFamily:'var(--mono)'}}>{badge}</span>
+                                                </div>
+                                                {/* data rows */}
+                                                {rows.map(r => r && (
+                                                    <div key={r.k} className="data-row" style={{padding:'2px 0'}}>
+                                                        <span style={{color:'var(--text-secondary)',fontSize:'0.75rem'}}>{r.k}</span>
+                                                        <span style={{color:r.c||'var(--text-secondary)',fontFamily:'var(--mono)',fontSize:'0.77rem'}}>{r.v}</span>
+                                                    </div>
+                                                ))}
+                                                {/* result row */}
+                                                <div style={{marginTop:'9px',paddingTop:'9px',borderTop:`1px solid ${accentColor}22`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                                    <span style={{color:'#fff',fontWeight:600,fontSize:'0.8rem'}}>{gLabel}{isCapped?' (capped)':''}</span>
+                                                    <span style={{fontFamily:'var(--mono)',color:accentColor,fontWeight:700,fontSize:'1.0rem'}}>{gValue}</span>
+                                                </div>
+                                                {gNote && <p style={{color:'var(--text-secondary)',fontSize:'0.71rem',fontStyle:'italic',margin:'5px 0 0'}}>{gNote}</p>}
+                                            </div>
+                                        );
+
+                                        return (
+                                            <div>
+                                                <HeaderRows/>
+
+                                                {useRegional ? (
+                                                    /* ── Two-column regional view ── */
+                                                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+                                                        <GPanel
+                                                            title="Earnings Yield g"
+                                                            badge="histgr · 5yr EPS"
+                                                            badgeColor="var(--blue)"
+                                                            accentColor="#5eadff"
+                                                            rows={[
+                                                                { k:'5yr EPS Forecast', v: gd.industryHistGrowth!=null ? Number(gd.industryHistGrowth).toFixed(2)+'%':'N/A', c:'var(--blue)' },
+                                                                { k:'Benchmark (TM)',   v: gd.benchmarkHistGrowth!=null ? Number(gd.benchmarkHistGrowth).toFixed(2)+'%':'N/A' },
+                                                                { k:'Weight',           v: gd.earningsYieldWeight!=null ? Number(gd.earningsYieldWeight).toFixed(4):'N/A' },
+                                                                { k:`GDP Base (${result.currency})`, v: gdpPct },
+                                                            ]}
+                                                            gLabel="EY g = GDP × Weight"
+                                                            gValue={(earningsGrowthRate*100).toFixed(2)+'%'}
+                                                            gNote={gd.earnings_yield_g_note}
+                                                        />
+                                                        <GPanel
+                                                            title="Gordon DDM g"
+                                                            badge="fundgr · ROE×b"
+                                                            badgeColor="var(--purple)"
+                                                            accentColor="#c084fc"
+                                                            rows={[
+                                                                { k:'Fundamental (ROE×b)', v: gd.industryEpsGrowth!=null ? Number(gd.industryEpsGrowth).toFixed(2)+'%':'N/A', c:'var(--purple)' },
+                                                                { k:'Benchmark (TM)',      v: gd.benchmarkEpsGrowth!=null ? Number(gd.benchmarkEpsGrowth).toFixed(2)+'%':'N/A' },
+                                                                { k:'Weight',              v: gd.weight!=null ? Number(gd.weight).toFixed(4):'N/A' },
+                                                                { k:`GDP Base (${result.currency})`, v: gdpPct },
+                                                            ]}
+                                                            gLabel="Gordon g = GDP × Weight"
+                                                            gValue={(result.dividendGrowth*100).toFixed(2)+'%'}
+                                                            gNote={gd.note}
+                                                            isCapped={gd.capped}
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    /* ── Legacy single-column view ── */
+                                                    <div>
+                                                        {[
+                                                            { k:'Industry EPS Growth — 5yr', v: gd.industryEpsGrowth!=null ? Number(gd.industryEpsGrowth).toFixed(2)+'%':'N/A', vColor:'var(--gold)' },
+                                                            { k:'Benchmark Total Market',    v: gd.benchmarkEpsGrowth!=null ? Number(gd.benchmarkEpsGrowth).toFixed(2)+'%':'N/A', vColor:'var(--text-secondary)' },
+                                                            { k:'Weight = Industry ÷ Benchmark', v: gd.weight!=null ? Number(gd.weight).toFixed(4):'N/A', vColor:'var(--text-secondary)' },
+                                                            { k:`GDP Base (${result.currency})`, v: gdpPct, vColor:'var(--text-secondary)' },
+                                                        ].map(row => (
+                                                            <div key={row.k} className="data-row">
+                                                                <span className="data-key">{row.k}</span>
+                                                                <span className="data-val" style={{color:row.vColor}}>{row.v}</span>
+                                                            </div>
+                                                        ))}
+                                                        <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid rgba(255,255,255,0.07)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                                            <span style={{color:'#fff',fontWeight:600,fontSize:'0.87rem'}}>g (perpetuity) = GDP × Weight{gd.capped?' (capped)':''}</span>
+                                                            <span style={{fontFamily:'var(--mono)',color:'var(--purple)',fontWeight:600,fontSize:'1.05rem'}}>{(result.dividendGrowth*100).toFixed(2)}%</span>
+                                                        </div>
+                                                        {gd.note && <p style={{color:'var(--text-secondary)',fontSize:'0.74rem',fontStyle:'italic',margin:'8px 0 0'}}>{gd.note}</p>}
+                                                        <p style={{color:'var(--text-dim)',fontSize:'0.71rem',margin:'6px 0 0',fontStyle:'italic'}}>Using legacy US dataset — regional data loading on startup</p>
+                                                    </div>
+                                                )}
+
+                                                <p style={{color:'var(--text-dim)',fontSize:'0.7rem',margin:'10px 0 0'}}>Source: Damodaran NYU Stern {gd.damodaranYear||2026}</p>
+                                            </div>
+                                        );
+                                    })() : result.growthDetails?.method === 'override' ? (
                                         <div>
                                             <p style={{color:'var(--gold)',fontWeight:600,fontFamily:'var(--mono)',margin:'0 0 4px'}}>Manual override: g (perpetuity) = {(result.dividendGrowth*100).toFixed(2)}%</p>
                                             <p style={{color:'var(--text-secondary)',fontSize:'0.78rem',margin:0}}>Damodaran industry calculation bypassed. Earnings Yield uses this same g as fallback.</p>

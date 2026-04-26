@@ -416,14 +416,19 @@ def calculate_industry_growth(industry_name, currency='USD'):
         g, g_note, g_capped, g_weight = _apply_g_weight(
             fund_g_pct, fund_bm_pct, gdp_base, gdp_base_pct, industry_name)
 
-        if hist_g_pct is not None and hist_bm_pct is not None and hist_bm_pct > 0:
-            g_ey, g_ey_note, _, _ = _apply_g_weight(
+        hist_data_ok = (hist_g_pct is not None
+                        and hist_bm_pct is not None
+                        and hist_bm_pct > 0)
+
+        if hist_data_ok:
+            g_ey, g_ey_note, _, g_ey_weight = _apply_g_weight(
                 hist_g_pct, hist_bm_pct, gdp_base, gdp_base_pct, industry_name)
             g_ey_source = (f'Damodaran {source_year} {region} — '
                            f'{industry_name} (5yr EPS forecast)')
         else:
-            g_ey = g
-            g_ey_note = 'Historical EPS data unavailable — using fundamental growth'
+            g_ey        = g
+            g_ey_note   = 'Historical EPS data unavailable — using fundamental growth'
+            g_ey_weight = g_weight
             g_ey_source = (f'Damodaran {source_year} {region} — '
                            f'{industry_name} (fundamental, EPS n/a)')
 
@@ -436,9 +441,12 @@ def calculate_industry_growth(industry_name, currency='USD'):
             'source':                 (f'Damodaran {source_year} {region} — '
                                        f'{industry_name} (fundamental)'),
             'earnings_yield_g_source': g_ey_source,
+            # Gordon DDM computation inputs (fundgr)
             'weight':                 round(g_weight, 4) if g_weight is not None else None,
             'industry_eps_growth':    fund_g_pct,
             'benchmark_eps_growth':   fund_bm_pct,
+            # Earnings Yield computation inputs (histgr)
+            'earnings_yield_weight':  round(g_ey_weight, 4) if g_ey_weight is not None else None,
             'industry_hist_growth':   hist_g_pct,
             'benchmark_hist_growth':  hist_bm_pct,
             'gdp_base':               gdp_base,
