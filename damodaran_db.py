@@ -660,17 +660,46 @@ def fetch_damodaran_excel(url, dataset_type):
 
     filename = url.split('/')[-1]
 
-    try:
-        resp = requests.get(url, timeout=30, headers={'User-Agent': 'Mozilla/5.0'})
-        resp.raise_for_status()
-    except Exception as e:
-        print(f'[DAMODARAN] HTTP error fetching {filename}: {e}')
+    # More realistic browser headers — NYU server occasionally blocks plain Python UA
+    HEADERS = {
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/124.0.0.0 Safari/537.36'
+        ),
+        'Accept': 'application/vnd.ms-excel,*/*',
+        'Referer': 'https://pages.stern.nyu.edu/~adamodar/',
+    }
+
+    resp = None
+    # Try with SSL verification first; fall back without if certificate chain fails
+    for verify_ssl in (True, False):
+        try:
+            resp = requests.get(url, timeout=40, headers=HEADERS, verify=verify_ssl)
+            resp.raise_for_status()
+            print(f'[DAMODARAN] Downloaded {filename} '
+                  f'({len(resp.content)} bytes, ssl_verify={verify_ssl})')
+            break
+        except requests.exceptions.SSLError as e:
+            print(f'[DAMODARAN] SSL error for {filename} (verify={verify_ssl}): {e}')
+            if not verify_ssl:
+                return []  # both attempts failed
+        except Exception as e:
+            print(f'[DAMODARAN] HTTP error fetching {filename}: {e}')
+            return []
+
+    if resp is None or not resp.content:
+        print(f'[DAMODARAN] Empty response for {filename}')
         return []
 
     try:
         wb = xlrd.open_workbook(file_contents=resp.content)
     except Exception as e:
-        print(f'[DAMODARAN] xlrd could not open {filename}: {e}')
+        print(f'[DAMODARAN] xlrd could not open {filename} '
+              f'(content type: {resp.headers.get("Content-Type","?")}): {e}')
+        # Show first 200 bytes to help diagnose HTML error pages
+        preview = resp.content[:200]
+        print(f'[DAMODARAN] Response preview: {preview}')
         return []
 
     ws = wb.sheets()[0]
@@ -782,13 +811,25 @@ def refresh_regional_data():
     for region, datasets in REGIONAL_URLS.items():
         report[region] = {}
         for dataset_type, url in datasets.items():
-            rows = fetch_damodaran_excel(url, dataset_type)
+            filename = url.split('/')[-1]
+            try:
+                rows = fetch_damodaran_excel(url, dataset_type)
+            except Exception as e:
+                msg = f'fetch exception: {e}'
+                report[region][dataset_type] = {'status': 'error', 'count': 0, 'error': msg}
+                print(f'[DAMODARAN] {msg} — region={region} dataset={dataset_type}')
+                continue
+
             if not rows:
-                report[region][dataset_type] = {'status': 'error', 'count': 0}
-                print(f'[DAMODARAN] No data for region={region} dataset={dataset_type}')
+                report[region][dataset_type] = {
+                    'status': 'error', 'count': 0,
+                    'error': f'empty result from {filename}'
+                }
+                print(f'[DAMODARAN] No rows parsed from {filename}')
                 continue
 
             count = 0
+            has_benchmark = any(n.strip() == 'Total Market' for n, _ in rows)
             for name, growth_pct in rows:
                 is_benchmark = 1 if name.strip() == 'Total Market' else 0
                 try:
@@ -809,9 +850,15 @@ def refresh_regional_data():
                     print(f'[DAMODARAN] DB upsert error for {name!r}: {e}')
 
             conn.commit()
-            report[region][dataset_type] = {'status': 'ok', 'count': count}
+            report[region][dataset_type] = {
+                'status': 'ok',
+                'count': count,
+                'has_benchmark': has_benchmark,
+                'url': url,
+            }
             print(f'[DAMODARAN] Stored {count} rows '
-                  f'(region={region}, dataset={dataset_type})')
+                  f'(region={region}, dataset={dataset_type}, '
+                  f'benchmark={has_benchmark})')
 
     conn.close()
     return report

@@ -636,6 +636,39 @@ def _require_admin_key():
     return None
 
 
+@app.route('/api/damodaran-status', methods=['GET'])
+def damodaran_status_public():
+    """
+    Public endpoint — no auth required.
+    Shows whether regional Damodaran data (VN/AU/US fundgr + histgr) has loaded.
+    Visit /api/damodaran-status to diagnose download failures.
+    """
+    try:
+        status = get_damodaran_status()
+        # Summarise regional table per region/dataset
+        regional = {}
+        for row in status.get('regional_datasets', []):
+            key = f"{row['region']}/{row['dataset']}"
+            regional[key] = {'rows': row['cnt'], 'last_updated': row['lu']}
+
+        total_regional = sum(r['rows'] for r in regional.values())
+        return jsonify({
+            'legacy_us_industries': status['industry_count'],
+            'regional_data_loaded': total_regional > 0,
+            'regional_total_rows': total_regional,
+            'regional_breakdown': regional,
+            'source_year': status['source_year'],
+            'last_updated': status['last_updated'],
+            'note': (
+                'Regional data loaded ✓' if total_regional > 0
+                else 'Regional data NOT loaded — startup download may have failed. '
+                     'Check server logs or POST /api/admin/refresh-damodaran.'
+            ),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/industries', methods=['GET'])
 def list_industries():
     """Return all Damodaran industries for the frontend dropdown."""
