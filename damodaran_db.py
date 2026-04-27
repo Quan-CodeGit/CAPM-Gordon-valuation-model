@@ -712,47 +712,87 @@ def fetch_damodaran_excel(url, dataset_type):
         print(f'[DAMODARAN] Response preview: {preview}')
         return []
 
-    ws = wb.sheets()[0]
+    # ── Select the correct sheet ─────────────────────────────────────────────
+    # Damodaran workbooks have two sheets:
+    #   [0] "Variables & FAQ"   — metadata/legend (not data)
+    #   [1] "Industry Averages" — actual industry-level data
+    # Always use the "Industry Averages" sheet; fall back to last sheet if not found.
+    ws = None
+    for sh in wb.sheets():
+        if 'industry' in sh.name.lower():
+            ws = sh
+            break
+    if ws is None:
+        ws = wb.sheets()[-1]   # last sheet as last resort
+
     if ws.nrows < 3 or ws.ncols < 2:
-        print(f'[DAMODARAN] Unexpected sheet dimensions {ws.nrows}×{ws.ncols}: {filename}')
+        print(f'[DAMODARAN] Unexpected sheet dimensions {ws.nrows}×{ws.ncols} '
+              f'(sheet "{ws.name}"): {filename}')
         return []
 
-    # ── Locate header row (first row where col-0 contains "industry") ─────────
+    # ── Locate header row ────────────────────────────────────────────────────
+    # The actual column-header row has "Industry Name" in col-0 (row 7 in 2026 files).
+    # Scan up to row 15; match exactly "industry name" to avoid the metadata row
+    # "Companies in each industry:" which also contains "industry".
     header_row = None
-    for i in range(min(5, ws.nrows)):
-        cell = str(ws.cell_value(i, 0)).lower()
-        if 'industry' in cell:
+    for i in range(min(15, ws.nrows)):
+        cell = str(ws.cell_value(i, 0)).strip().lower()
+        if cell == 'industry name':
             header_row = i
             break
     if header_row is None:
-        header_row = 1   # Damodaran: row-0 = title, row-1 = headers
+        # Broader fallback: first row with "industry" in col-0
+        for i in range(min(15, ws.nrows)):
+            cell = str(ws.cell_value(i, 0)).strip().lower()
+            if 'industry' in cell:
+                header_row = i
+                break
+    if header_row is None:
+        header_row = 7   # hardcoded position for Damodaran 2026 layout
 
     headers = [str(ws.cell_value(header_row, j)).lower().strip()
                for j in range(ws.ncols)]
-    print(f'[DAMODARAN] {filename} headers[{header_row}]: {headers}')
+    print(f'[DAMODARAN] {filename} sheet="{ws.name}" header_row={header_row}: {headers}')
 
     # ── Locate target column ─────────────────────────────────────────────────
+    # histgr files: last column = "Expected Growth in EPS - Next 5 years" (col 6)
+    # fundgr files: col 4       = "Fundamental Growth" (ROE × retention ratio)
     target_col = None
 
     if dataset_type == 'historical':
-        # histgr: "Expected Growth in EPS - Next 5 years"
+        # histgr: "Expected Growth in EPS - Next 5 years" (col 6 in 2026 layout)
+        # Priority 1: column explicitly about EPS (avoids matching revenue-growth cols)
         for j, h in enumerate(headers):
-            if 'expected' in h and ('5' in h or 'next' in h or 'forecast' in h):
+            if 'expected' in h and 'eps' in h:
                 target_col = j
                 break
+        # Priority 2: expected + 5yr hint (fallback for older file layouts)
+        if target_col is None:
+            for j, h in enumerate(headers):
+                if ('expected' in h and 'growth' in h
+                        and ('5 year' in h or 'five year' in h)):
+                    target_col = j
+                    break
+        if target_col is None:
+            target_col = 6   # positional fallback for histgr
 
     else:  # 'fundamental'
-        # fundgr: "Expected Growth in EPS" via current ROE×retention.
-        # The file also has a "non-cash" / "stable" variant — skip those.
+        # fundgr: look for "Fundamental Growth" (col 4).
+        # Also handles older files that used "Expected Growth in EPS" naming.
         skip = {'stable', 'non-cash', 'noncash', 'net income'}
         for j, h in enumerate(headers):
-            if ('expected' in h and 'growth' in h
-                    and not any(s in h for s in skip)):
+            if 'fundamental' in h and 'growth' in h:
                 target_col = j
                 break
+        if target_col is None:
+            for j, h in enumerate(headers):
+                if ('expected' in h and 'growth' in h
+                        and not any(s in h for s in skip)):
+                    target_col = j
+                    break
+        if target_col is None:
+            target_col = 4   # positional fallback for fundgr (col 4 = Fundamental Growth)
 
-    if target_col is None:
-        target_col = 6   # positional fallback (both fundgr and histgr use col 6)
     if target_col >= ws.ncols:
         target_col = ws.ncols - 1
 
@@ -790,9 +830,20 @@ def fetch_damodaran_excel(url, dataset_type):
 
         results.append((name, growth_pct))
 
+    # ── Sentinel filtering ────────────────────────────────────────────────────
+    # Damodaran uses 7.0 (and occasionally other large values) as a sentinel for
+    # "not meaningful / insufficient data" in fundgr files.  Replace those with None
+    # so they don't interfere with the decimal-format detection below.
+    SENTINEL_THRESHOLD = 3.0   # any value above this is treated as N/A
+    results = [
+        (n, None if (g is not None and abs(g) > SENTINEL_THRESHOLD) else g)
+        for n, g in results
+    ]
+
     # ── Decimal-vs-percent auto-detection ────────────────────────────────────
-    # Damodaran uses % format. Sanity-check the Total Market row.
-    # If its value looks like 0.14 instead of 14.0, multiply all by 100.
+    # All current Damodaran Excel files store values as decimals (0.1395 = 13.95%).
+    # If the max absolute value of non-None entries is < 2.0 (i.e., < 200%), treat
+    # the entire column as decimal and multiply by 100 to get %.
     numeric = [g for _, g in results if g is not None]
     if numeric and max(abs(v) for v in numeric) < 2.0:
         print(f'[DAMODARAN] {filename} values appear to be decimal — converting to %')
