@@ -655,8 +655,18 @@ def fetch_damodaran_excel(url, dataset_type):
     try:
         import xlrd
     except ImportError:
-        print('[DAMODARAN] xlrd not installed — run: pip install xlrd==1.2.0')
-        return []
+        print('[DAMODARAN] xlrd not found — attempting runtime install...')
+        try:
+            import subprocess, sys
+            subprocess.check_call(
+                [sys.executable, '-m', 'pip', 'install', 'xlrd==1.2.0', '-q'],
+                timeout=60
+            )
+            import xlrd
+            print('[DAMODARAN] xlrd installed successfully at runtime')
+        except Exception as install_err:
+            print(f'[DAMODARAN] Runtime xlrd install failed: {install_err}')
+            return []
 
     filename = url.split('/')[-1]
 
