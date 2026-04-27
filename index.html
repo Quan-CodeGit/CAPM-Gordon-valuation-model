@@ -1127,22 +1127,52 @@
                                                             gValue={(earningsGrowthRate*100).toFixed(2)+'%'}
                                                             gNote={gd.earnings_yield_g_note}
                                                         />
-                                                        <GPanel
-                                                            title="Gordon DDM g"
-                                                            badge="fundgr · ROE×b"
-                                                            badgeColor="var(--purple)"
-                                                            accentColor="#c084fc"
-                                                            rows={[
+                                                        {(() => {
+                                                            // Detect whether the backend applied a CAPM-safety cap
+                                                            // on top of the Damodaran 2×GDP cap.
+                                                            // gd.g   = Damodaran result (after 2×GDP cap)
+                                                            // result.dividendGrowth = after CAPM safety cap
+                                                            const damodaranG = gd.g;           // e.g. 0.11 (11%)
+                                                            const finalG     = result.dividendGrowth; // e.g. 0.0529 (5.29%)
+                                                            const capmCapActive = result.growthWarning &&
+                                                                damodaranG != null &&
+                                                                Math.abs(damodaranG - finalG) > 0.0005;
+
+                                                            const gordonRows = [
                                                                 { k:'Fundamental (ROE×b)', v: gd.industryEpsGrowth!=null ? Number(gd.industryEpsGrowth).toFixed(2)+'%':'N/A', c:'var(--purple)' },
                                                                 { k:'Benchmark (TM)',      v: gd.benchmarkEpsGrowth!=null ? Number(gd.benchmarkEpsGrowth).toFixed(2)+'%':'N/A' },
                                                                 { k:'Weight',              v: gd.weight!=null ? Number(gd.weight).toFixed(4):'N/A' },
                                                                 { k:`GDP Base (${result.currency})`, v: gdpPct },
-                                                            ]}
-                                                            gLabel="Gordon g = GDP × Weight"
-                                                            gValue={(result.dividendGrowth*100).toFixed(2)+'%'}
-                                                            gNote={gd.note}
-                                                            isCapped={gd.capped}
-                                                        />
+                                                                // If CAPM cap was applied, show the intermediate
+                                                                // Damodaran g so the user can see the full chain.
+                                                                capmCapActive
+                                                                    ? { k:'Damodaran g (2×GDP cap)', v: (damodaranG*100).toFixed(2)+'%', c:'rgba(192,132,252,0.55)' }
+                                                                    : null,
+                                                            ];
+
+                                                            const gordonLabel = capmCapActive
+                                                                ? 'Gordon g (CAPM safety cap)'
+                                                                : 'Gordon g = GDP × Weight';
+
+                                                            const gordonNote = [
+                                                                gd.note,
+                                                                capmCapActive ? result.growthWarning : null,
+                                                            ].filter(Boolean).join('  ·  ');
+
+                                                            return (
+                                                                <GPanel
+                                                                    title="Gordon DDM g"
+                                                                    badge="fundgr · ROE×b"
+                                                                    badgeColor="var(--purple)"
+                                                                    accentColor="#c084fc"
+                                                                    rows={gordonRows}
+                                                                    gLabel={gordonLabel}
+                                                                    gValue={(finalG*100).toFixed(2)+'%'}
+                                                                    gNote={gordonNote||undefined}
+                                                                    isCapped={gd.capped || capmCapActive}
+                                                                />
+                                                            );
+                                                        })()}
                                                     </div>
                                                 ) : (
                                                     /* ── Legacy single-column view ── */
