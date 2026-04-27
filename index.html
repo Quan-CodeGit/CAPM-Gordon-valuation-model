@@ -1043,7 +1043,9 @@
                                     {result.growthDetails?.method === 'industry' ? (() => {
                                         const gd = result.growthDetails;
                                         const gdpPct = gd.gdpBase != null ? (Number(gd.gdpBase)*100).toFixed(1)+'%' : 'N/A';
-                                        const useRegional = gd.usingRegionalData;
+                                        // Show two-column breakdown whenever we have tier data
+                                        // (regional OR legacy — both now use the tiered system)
+                                        const useRegional = gd.tier != null;
 
                                         // Shared header rows (industry + TV classification)
                                         const HeaderRows = () => (
@@ -1075,7 +1077,22 @@
                                             </div>
                                         );
 
+                                        // Tier chip colours
+                                        const TIER_COLOR = {
+                                            lagging:     '#f87171',  // red   — structurally below market
+                                            market:      '#94a3b8',  // slate — tracking economy
+                                            above:       '#34d399',  // green — clear outperformer
+                                            high_growth: '#fbbf24',  // gold  — structural advantage
+                                            baseline:    '#64748b',  // gray  — fallback
+                                        };
+                                        const tierLabel = t => ({
+                                            lagging:'Lagging', market:'Market',
+                                            above:'Above avg', high_growth:'High growth',
+                                            baseline:'Baseline',
+                                        }[t] || t);
+
                                         // Column panel for one g calculation
+                                        // rows: [{k, v, c?, chipColor?}]  — chipColor renders a pill badge
                                         const GPanel = ({title, badge, badgeColor, rows, gLabel, gValue, gNote, isCapped, accentColor}) => (
                                             <div style={{
                                                 background:'rgba(255,255,255,0.03)',
@@ -1093,7 +1110,10 @@
                                                 {rows.map(r => r && (
                                                     <div key={r.k} className="data-row" style={{padding:'2px 0'}}>
                                                         <span style={{color:'var(--text-secondary)',fontSize:'0.75rem'}}>{r.k}</span>
-                                                        <span style={{color:r.c||'var(--text-secondary)',fontFamily:'var(--mono)',fontSize:'0.77rem'}}>{r.v}</span>
+                                                        {r.chipColor
+                                                            ? <span style={{background:r.chipColor+'28',color:r.chipColor,fontFamily:'var(--mono)',fontSize:'0.7rem',padding:'1px 8px',borderRadius:'4px',fontWeight:600}}>{r.v}</span>
+                                                            : <span style={{color:r.c||'var(--text-secondary)',fontFamily:'var(--mono)',fontSize:'0.77rem'}}>{r.v}</span>
+                                                        }
                                                     </div>
                                                 ))}
                                                 {/* result row */}
@@ -1112,47 +1132,105 @@
                                                 {useRegional ? (
                                                     /* ── Two-column regional view ── */
                                                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
-                                                        <GPanel
-                                                            title="Earnings Yield g"
-                                                            badge="histgr · 5yr EPS"
-                                                            badgeColor="var(--blue)"
-                                                            accentColor="#5eadff"
-                                                            rows={[
-                                                                { k:'5yr EPS Forecast', v: gd.industryHistGrowth!=null ? Number(gd.industryHistGrowth).toFixed(2)+'%':'N/A', c:'var(--blue)' },
-                                                                { k:'Benchmark (TM)',   v: gd.benchmarkHistGrowth!=null ? Number(gd.benchmarkHistGrowth).toFixed(2)+'%':'N/A' },
-                                                                { k:'Weight',           v: gd.earningsYieldWeight!=null ? Number(gd.earningsYieldWeight).toFixed(4):'N/A' },
-                                                                { k:`GDP Base (${result.currency})`, v: gdpPct },
-                                                            ]}
-                                                            gLabel="EY g = GDP × Weight"
-                                                            gValue={(earningsGrowthRate*100).toFixed(2)+'%'}
-                                                            gNote={gd.earnings_yield_g_note}
-                                                        />
+
+                                                        {/* ── EY g panel ── histgr 5yr EPS, short-term, above GDP allowed */}
                                                         {(() => {
-                                                            // Detect whether the backend applied a CAPM-safety cap
-                                                            // on top of the Damodaran 2×GDP cap.
-                                                            // gd.g   = Damodaran result (after 2×GDP cap)
-                                                            // result.dividendGrowth = after CAPM safety cap
-                                                            const damodaranG = gd.g;           // e.g. 0.11 (11%)
-                                                            const finalG     = result.dividendGrowth; // e.g. 0.0529 (5.29%)
+                                                            const eyTierColor = TIER_COLOR[gd.eyTier] || '#94a3b8';
+                                                            const eyBenchActual = gd.benchmarkHistGrowth;
+                                                            const eyBenchEff    = gd.eyEffectiveBenchmark;
+                                                            const eyFloored     = eyBenchEff != null && eyBenchActual != null
+                                                                                  && eyBenchEff > eyBenchActual + 0.01;
+                                                            const eyCapPct      = gd.eyCapPct != null
+                                                                                  ? Number(gd.eyCapPct).toFixed(1)+'%' : 'N/A';
+                                                            const eyIndustryPct = gd.industryHistGrowth != null
+                                                                                  ? Number(gd.industryHistGrowth).toFixed(2)+'%' : 'N/A';
+                                                            const eyFinalG      = earningsGrowthRate;
+
+                                                            const eyRows = [
+                                                                { k:'5yr EPS Forecast',
+                                                                  v: eyIndustryPct, c:'var(--blue)' },
+                                                                { k:'Benchmark TM (actual)',
+                                                                  v: eyBenchActual!=null ? Number(eyBenchActual).toFixed(2)+'%':'N/A' },
+                                                                // Show floor row only when it actually changed the benchmark
+                                                                eyFloored
+                                                                    ? { k:'Eff. Benchmark (↑ floored)',
+                                                                        v: Number(eyBenchEff).toFixed(2)+'%',
+                                                                        c:'rgba(94,173,255,0.5)' }
+                                                                    : null,
+                                                                { k:'Ratio (industry ÷ eff. bench)',
+                                                                  v: gd.eyRatio!=null ? Number(gd.eyRatio).toFixed(2)+'×':'N/A' },
+                                                                { k:'Sector tier',
+                                                                  v: tierLabel(gd.eyTier),
+                                                                  chipColor: eyTierColor },
+                                                                { k:`EY Cap (${gd.eyCapMult!=null?Number(gd.eyCapMult).toFixed(1):'?'}× GDP)`,
+                                                                  v: eyCapPct, c:'rgba(94,173,255,0.6)' },
+                                                                { k:`GDP Base (${result.currency})`, v: gdpPct },
+                                                            ];
+
+                                                            return (
+                                                                <GPanel
+                                                                    title="Earnings Yield g"
+                                                                    badge="histgr · 5yr EPS"
+                                                                    badgeColor="var(--blue)"
+                                                                    accentColor="#5eadff"
+                                                                    rows={eyRows}
+                                                                    gLabel="EY g = min(5yr EPS, cap)"
+                                                                    gValue={(eyFinalG*100).toFixed(2)+'%'}
+                                                                    isCapped={gd.eyCapPct!=null && gd.industryHistGrowth!=null
+                                                                              && gd.industryHistGrowth/100 > gd.eyCapPct/100 + 0.0005}
+                                                                    gNote={gd.earnings_yield_g_note}
+                                                                />
+                                                            );
+                                                        })()}
+
+                                                        {/* ── Gordon g panel ── fundgr ROE×b, perpetuity, GDP-anchored */}
+                                                        {(() => {
+                                                            const gTierColor = TIER_COLOR[gd.tier] || '#94a3b8';
+                                                            const gBenchActual = gd.benchmarkEpsGrowth;
+                                                            const gBenchEff    = gd.effectiveBenchmark;
+                                                            const gFloored     = gBenchEff != null && gBenchActual != null
+                                                                                 && gBenchEff > gBenchActual + 0.01;
+                                                            const gCapPct      = gd.capPct != null
+                                                                                 ? Number(gd.capPct).toFixed(1)+'%' : 'N/A';
+                                                            const gIndustryPct = gd.industryEpsGrowth != null
+                                                                                 ? Number(gd.industryEpsGrowth).toFixed(2)+'%' : 'N/A';
+
+                                                            // gd.g = Damodaran tier result; result.dividendGrowth = after CAPM safety cap
+                                                            const damodaranG = gd.g;
+                                                            const finalG     = result.dividendGrowth;
                                                             const capmCapActive = result.growthWarning &&
                                                                 damodaranG != null &&
                                                                 Math.abs(damodaranG - finalG) > 0.0005;
 
-                                                            const gordonRows = [
-                                                                { k:'Fundamental (ROE×b)', v: gd.industryEpsGrowth!=null ? Number(gd.industryEpsGrowth).toFixed(2)+'%':'N/A', c:'var(--purple)' },
-                                                                { k:'Benchmark (TM)',      v: gd.benchmarkEpsGrowth!=null ? Number(gd.benchmarkEpsGrowth).toFixed(2)+'%':'N/A' },
-                                                                { k:'Weight',              v: gd.weight!=null ? Number(gd.weight).toFixed(4):'N/A' },
+                                                            const gRows = [
+                                                                { k:'Fundamental (ROE×b)',
+                                                                  v: gIndustryPct, c:'var(--purple)' },
+                                                                { k:'Benchmark TM (actual)',
+                                                                  v: gBenchActual!=null ? Number(gBenchActual).toFixed(2)+'%':'N/A' },
+                                                                gFloored
+                                                                    ? { k:'Eff. Benchmark (↑ floored)',
+                                                                        v: Number(gBenchEff).toFixed(2)+'%',
+                                                                        c:'rgba(192,132,252,0.5)' }
+                                                                    : null,
+                                                                { k:'Ratio (industry ÷ eff. bench)',
+                                                                  v: gd.ratio!=null ? Number(gd.ratio).toFixed(2)+'×':'N/A' },
+                                                                { k:'Sector tier',
+                                                                  v: tierLabel(gd.tier),
+                                                                  chipColor: gTierColor },
+                                                                { k:`Gordon Cap (${gd.capMult!=null?Number(gd.capMult).toFixed(1):'?'}× GDP)`,
+                                                                  v: gCapPct, c:'rgba(192,132,252,0.6)' },
                                                                 { k:`GDP Base (${result.currency})`, v: gdpPct },
-                                                                // If CAPM cap was applied, show the intermediate
-                                                                // Damodaran g so the user can see the full chain.
+                                                                // If CAPM cap further reduced the tiered g, show both
                                                                 capmCapActive
-                                                                    ? { k:'Damodaran g (2×GDP cap)', v: (damodaranG*100).toFixed(2)+'%', c:'rgba(192,132,252,0.55)' }
+                                                                    ? { k:'Tier g (before CAPM cap)',
+                                                                        v: (damodaranG*100).toFixed(2)+'%',
+                                                                        c:'rgba(192,132,252,0.45)' }
                                                                     : null,
                                                             ];
 
                                                             const gordonLabel = capmCapActive
                                                                 ? 'Gordon g (CAPM safety cap)'
-                                                                : 'Gordon g = GDP × Weight';
+                                                                : 'Gordon g = min(ROE×b, cap)';
 
                                                             const gordonNote = [
                                                                 gd.note,
@@ -1165,11 +1243,11 @@
                                                                     badge="fundgr · ROE×b"
                                                                     badgeColor="var(--purple)"
                                                                     accentColor="#c084fc"
-                                                                    rows={gordonRows}
+                                                                    rows={gRows}
                                                                     gLabel={gordonLabel}
                                                                     gValue={(finalG*100).toFixed(2)+'%'}
-                                                                    gNote={gordonNote||undefined}
                                                                     isCapped={gd.capped || capmCapActive}
+                                                                    gNote={gordonNote||undefined}
                                                                 />
                                                             );
                                                         })()}

@@ -316,42 +316,104 @@ def _get_regional_benchmark(region, dataset):
     return row['growth_pct'] if (row and row['growth_pct'] is not None) else None
 
 
-def _apply_g_weight(industry_g_pct, benchmark_pct, gdp_base, gdp_base_pct, industry_name):
-    """
-    Apply the Damodaran GDP-weighting formula:
-        weight = industry_g_pct / benchmark_pct
-        g      = gdp_base × weight
+# ── Tier table ───────────────────────────────────────────────────────────────
+# Sector tiers are determined by:
+#   ratio = industry_g / effective_benchmark
+#   effective_benchmark = max(actual_benchmark, gdp_base_pct × 0.5)
+#   (the floor prevents ratio explosion when the benchmark is near-zero)
+#
+# Gordon cap (perpetuity): anchored to GDP — industries grow at most 1.2× GDP forever.
+# EY cap (short-term signal): above GDP allowed — captures near-term industry momentum.
+_TIER_TABLE = [
+    # (ratio_upper_bound,  tier_name,    gordon_mult, ey_mult)
+    (0.75, 'lagging',      0.9,          1.0),   # industry structurally below market
+    (1.5,  'market',       1.0,          1.5),   # broadly in line with economy
+    (3.0,  'above',        1.1,          2.0),   # clear sustained outperformer
+    (None, 'high_growth',  1.2,          2.0),   # structural advantage / penetration gap
+]
 
-    Handles None / negative / outperformance / 2× GDP cap.
-    Returns (g: float, note: str|None, capped: bool, weight: float|None).
+def _classify_tier(ratio):
+    """Return (tier_name, gordon_mult, ey_mult) for a given industry/benchmark ratio."""
+    for upper, name, gm, em in _TIER_TABLE:
+        if upper is None or ratio < upper:
+            return name, gm, em
+    return 'high_growth', 1.2, 2.0  # safety fallback (unreachable)
+
+
+def _apply_g_tiered(industry_g_pct, benchmark_pct, gdp_base, gdp_base_pct,
+                    industry_name, is_ey=False):
     """
+    Tier-based g calculator.  Replaces the old GDP×weight approach.
+
+    Steps (mirrored in the UI breakdown for full transparency):
+      1. effective_bench = max(benchmark_pct, gdp_base_pct × 0.5)
+         — floor prevents ratio explosion when benchmark ≈ 0 (e.g. VN Total Market 0.67%)
+      2. ratio = industry_g_pct / effective_bench
+      3. tier  = classify(ratio) → lagging / market / above / high_growth
+      4. mult  = gordon_mult (is_ey=False) | ey_mult (is_ey=True)
+      5. cap   = mult × gdp_base
+      6. g     = min(industry_g_pct / 100, cap)
+
+    is_ey=False → Gordon DDM g (perpetuity, tighter GDP anchor)
+    is_ey=True  → Earnings Yield g (short-term signal, more permissive cap)
+
+    Returns a dict with keys: g, note, capped, tier, ratio,
+    effective_bench_pct, cap_mult, cap_pct.
+    """
+    _baseline = dict(
+        g=gdp_base, capped=False, tier='baseline',
+        ratio=None, effective_bench_pct=None,
+        cap_mult=1.0, cap_pct=round(gdp_base_pct, 4),
+    )
+
     if industry_g_pct is None:
-        return gdp_base, f'No growth data for {industry_name} — using GDP baseline ({gdp_base_pct:.1f}%)', False, None
-
+        return {**_baseline,
+                'note': f'No growth data for {industry_name} — using GDP baseline ({gdp_base_pct:.1f}%)'}
     if industry_g_pct < 0:
-        note = f'Negative industry growth ({industry_g_pct:.2f}%) — using GDP baseline ({gdp_base_pct:.1f}%)'
-        return gdp_base, note, False, None
-
+        return {**_baseline,
+                'note': f'Negative growth ({industry_g_pct:.2f}%) — using GDP baseline ({gdp_base_pct:.1f}%)'}
     if benchmark_pct is None or benchmark_pct <= 0:
-        return gdp_base, 'Benchmark unavailable — using GDP baseline', False, None
+        return {**_baseline, 'note': 'Benchmark unavailable — using GDP baseline'}
 
-    weight = industry_g_pct / benchmark_pct
-    g = gdp_base * weight
+    # Step 1: benchmark floor
+    floor = gdp_base_pct * 0.5
+    effective_bench = max(benchmark_pct, floor)
+    floored = effective_bench > benchmark_pct + 0.001   # True when floor changed the value
 
-    note = None
-    capped = False
+    # Step 2-3: ratio → tier
+    ratio = industry_g_pct / effective_bench
+    tier_name, gordon_mult, ey_mult = _classify_tier(ratio)
+    cap_mult = ey_mult if is_ey else gordon_mult
 
-    if g > gdp_base:
-        note = (f'Industry-adjusted: {g*100:.1f}% '
-                f'(above GDP baseline — sector outperformance)')
+    # Step 4-6: cap and apply
+    cap = cap_mult * gdp_base
+    industry_decimal = industry_g_pct / 100
+    g = min(industry_decimal, cap)
+    capped = industry_decimal > cap + 1e-6
 
-    if g > 2 * gdp_base:
-        g = 2 * gdp_base
-        capped = True
-        cap_note = f'Capped at 2× GDP baseline ({2*gdp_base_pct:.1f}%)'
-        note = f'{note}. {cap_note}' if note else cap_note
+    # Build human-readable note (shown in UI)
+    tier_label = {'lagging': 'Lagging', 'market': 'Market',
+                  'above': 'Above avg', 'high_growth': 'High growth'}.get(tier_name, tier_name)
+    note_parts = [f'{tier_label} tier (ratio {ratio:.2f}×)']
+    if floored:
+        note_parts.append(
+            f'benchmark floored: {effective_bench:.2f}% (actual {benchmark_pct:.2f}%)')
+    note_parts.append(f'cap = {cap_mult:.1f}× GDP = {cap*100:.1f}%')
+    if capped:
+        note_parts.append(
+            f'industry rate {industry_g_pct:.2f}% › cap → g = {g*100:.2f}%')
+    note = '. '.join(note_parts)
 
-    return g, note, capped, weight
+    return {
+        'g':                   round(g, 4),
+        'note':                note,
+        'capped':              capped,
+        'tier':                tier_name,
+        'ratio':               round(ratio, 4),
+        'effective_bench_pct': round(effective_bench, 4),
+        'cap_mult':            cap_mult,
+        'cap_pct':             round(cap * 100, 4),
+    }
 
 
 # ============================================================================
@@ -367,26 +429,31 @@ def calculate_industry_growth(industry_name, currency='USD'):
       g               — from fundgr regional file (ROE×b fundamental growth)
       earnings_yield_g — from histgr regional file (5yr analyst EPS forecast)
 
-    Both use the same GDP-weighting formula:
-      weight = industry_g / benchmark_g
-      g_final = gdp_base × weight        (capped at 2× gdp_base)
+    Tier-based method (replaces GDP×weight):
+      effective_bench = max(benchmark_g, gdp_base_pct × 0.5)
+      ratio           = industry_g / effective_bench
+      tier            → fixed cap multiplier (see _TIER_TABLE)
+      Gordon g        = min(ROE×b, gordon_mult × gdp_base)   — perpetuity, GDP-anchored
+      EY g            = min(5yr EPS, ey_mult × gdp_base)     — short-term, above GDP allowed
 
     Falls back to legacy damodaran_growth table (US histgr seed data) when
-    regional Excel data hasn't been downloaded yet.
+    regional Excel files haven't been downloaded yet.
 
     Returns dict with keys:
-      g                     — perpetuity growth rate (decimal) for Gordon DDM
-      earnings_yield_g      — 5yr EPS growth rate (decimal) for Earnings Yield
-      note                  — warning/info for perpetuity g
-      earnings_yield_g_note — warning/info for EY g
-      capped                — whether 2× ceiling was applied to g
-      source                — human-readable label for g
-      earnings_yield_g_source — human-readable label for EY g
-      weight                — Damodaran weight used for g
-      industry_eps_growth   — raw industry fundgr % (or legacy histgr %)
-      benchmark_eps_growth  — raw benchmark %
+      g                     — Gordon DDM perpetuity growth rate (decimal)
+      earnings_yield_g      — EY short-term growth rate (decimal)
+      note / earnings_yield_g_note — human-readable breakdown of each calculation
+      capped                — whether tier cap was applied to g
+      source / earnings_yield_g_source — data provenance labels
+      tier / ey_tier        — sector tier (lagging|market|above|high_growth)
+      ratio / ey_ratio      — industry/effective_benchmark classification ratio
+      effective_benchmark / ey_effective_benchmark — floored benchmark used
+      cap_mult / ey_cap_mult — GDP multiplier from tier
+      cap_pct / ey_cap_pct  — absolute cap value in %
+      industry_eps_growth   — raw industry fundgr %
+      benchmark_eps_growth  — raw fundgr benchmark %
       industry_hist_growth  — raw histgr % (None if not available)
-      benchmark_hist_growth — raw histgr benchmark % (None if not available)
+      benchmark_hist_growth — raw histgr benchmark %
       gdp_base              — GDP base rate (decimal)
       region                — 'US' / 'Australia' / 'Emerging'
       using_regional_data   — True if live Excel data was used
@@ -413,40 +480,51 @@ def calculate_industry_growth(industry_name, currency='USD'):
 
     if using_regional:
         # ── Regional path ────────────────────────────────────────────────────
-        g, g_note, g_capped, g_weight = _apply_g_weight(
-            fund_g_pct, fund_bm_pct, gdp_base, gdp_base_pct, industry_name)
+        # Gordon g: fundgr ROE×b — perpetuity, GDP-anchored cap
+        r_g = _apply_g_tiered(fund_g_pct, fund_bm_pct, gdp_base, gdp_base_pct,
+                               industry_name, is_ey=False)
 
         hist_data_ok = (hist_g_pct is not None
                         and hist_bm_pct is not None
                         and hist_bm_pct > 0)
 
         if hist_data_ok:
-            g_ey, g_ey_note, _, g_ey_weight = _apply_g_weight(
-                hist_g_pct, hist_bm_pct, gdp_base, gdp_base_pct, industry_name)
+            # EY g: histgr 5yr EPS — short-term signal, more permissive cap
+            r_ey = _apply_g_tiered(hist_g_pct, hist_bm_pct, gdp_base, gdp_base_pct,
+                                    industry_name, is_ey=True)
             g_ey_source = (f'Damodaran {source_year} {region} — '
-                           f'{industry_name} (5yr EPS forecast)')
+                           f'{industry_name} (5yr EPS, {r_ey["tier"]} tier)')
         else:
-            g_ey        = g
-            g_ey_note   = 'Historical EPS data unavailable — using fundamental growth'
-            g_ey_weight = g_weight
+            r_ey = {**r_g,
+                    'note': 'Historical EPS data unavailable — using fundamental growth'}
             g_ey_source = (f'Damodaran {source_year} {region} — '
                            f'{industry_name} (fundamental, EPS n/a)')
 
         return {
-            'g':                      round(g, 4),
-            'earnings_yield_g':       round(g_ey, 4),
-            'note':                   g_note,
-            'earnings_yield_g_note':  g_ey_note,
-            'capped':                 g_capped,
+            'g':                      r_g['g'],
+            'earnings_yield_g':       r_ey['g'],
+            'note':                   r_g['note'],
+            'earnings_yield_g_note':  r_ey['note'],
+            'capped':                 r_g['capped'],
             'source':                 (f'Damodaran {source_year} {region} — '
-                                       f'{industry_name} (fundamental)'),
+                                       f'{industry_name} (fundgr, {r_g["tier"]} tier)'),
             'earnings_yield_g_source': g_ey_source,
-            # Gordon DDM computation inputs (fundgr)
-            'weight':                 round(g_weight, 4) if g_weight is not None else None,
+            # Gordon DDM tier breakdown (fundgr)
+            'tier':                   r_g['tier'],
+            'ratio':                  r_g['ratio'],
+            'effective_benchmark':    r_g['effective_bench_pct'],
+            'cap_mult':               r_g['cap_mult'],
+            'cap_pct':                r_g['cap_pct'],
+            'weight':                 None,   # deprecated (was GDP×weight)
             'industry_eps_growth':    fund_g_pct,
             'benchmark_eps_growth':   fund_bm_pct,
-            # Earnings Yield computation inputs (histgr)
-            'earnings_yield_weight':  round(g_ey_weight, 4) if g_ey_weight is not None else None,
+            # EY tier breakdown (histgr)
+            'ey_tier':                r_ey['tier'],
+            'ey_ratio':               r_ey['ratio'],
+            'ey_effective_benchmark': r_ey['effective_bench_pct'],
+            'ey_cap_mult':            r_ey['cap_mult'],
+            'ey_cap_pct':             r_ey['cap_pct'],
+            'earnings_yield_weight':  None,   # deprecated
             'industry_hist_growth':   hist_g_pct,
             'benchmark_hist_growth':  hist_bm_pct,
             'gdp_base':               gdp_base,
@@ -527,22 +605,38 @@ def calculate_industry_growth(industry_name, currency='USD'):
 
     benchmark = get_benchmark()
     benchmark_eps = benchmark['eps_growth_next5yr'] if benchmark else 13.95
-    g, g_note, g_capped, g_weight = _apply_g_weight(
-        eps_growth, benchmark_eps, gdp_base, gdp_base_pct, industry_name)
 
-    source_label = f'Damodaran {source_year} — {industry_name} (legacy US histgr)'
+    # Legacy has only histgr EPS data — apply tiered caps for both g values.
+    # Gordon g uses the tighter GDP-anchored cap; EY g uses the permissive cap.
+    r_g  = _apply_g_tiered(eps_growth, benchmark_eps, gdp_base, gdp_base_pct,
+                            industry_name, is_ey=False)
+    r_ey = _apply_g_tiered(eps_growth, benchmark_eps, gdp_base, gdp_base_pct,
+                            industry_name, is_ey=True)
+
+    source_label = f'Damodaran {source_year} — {industry_name} (legacy US histgr, {r_g["tier"]} tier)'
 
     return {
-        'g':                      round(g, 4),
-        'earnings_yield_g':       round(g, 4),   # same as g in legacy path
-        'note':                   g_note,
-        'earnings_yield_g_note':  None,
-        'capped':                 g_capped,
+        'g':                      r_g['g'],
+        'earnings_yield_g':       r_ey['g'],
+        'note':                   r_g['note'],
+        'earnings_yield_g_note':  r_ey['note'],
+        'capped':                 r_g['capped'],
         'source':                 source_label,
         'earnings_yield_g_source': source_label,
-        'weight':                 round(g_weight, 4) if g_weight is not None else None,
+        'tier':                   r_g['tier'],
+        'ratio':                  r_g['ratio'],
+        'effective_benchmark':    r_g['effective_bench_pct'],
+        'cap_mult':               r_g['cap_mult'],
+        'cap_pct':                r_g['cap_pct'],
+        'weight':                 None,   # deprecated
         'industry_eps_growth':    eps_growth,
         'benchmark_eps_growth':   benchmark_eps,
+        'ey_tier':                r_ey['tier'],
+        'ey_ratio':               r_ey['ratio'],
+        'ey_effective_benchmark': r_ey['effective_bench_pct'],
+        'ey_cap_mult':            r_ey['cap_mult'],
+        'ey_cap_pct':             r_ey['cap_pct'],
+        'earnings_yield_weight':  None,   # deprecated
         'industry_hist_growth':   None,
         'benchmark_hist_growth':  None,
         'gdp_base':               gdp_base,
