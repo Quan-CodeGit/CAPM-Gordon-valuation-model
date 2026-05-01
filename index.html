@@ -377,6 +377,45 @@
             display: flex; gap: 10px; align-items: flex-start;
             box-shadow: 0 2px 16px rgba(0,0,0,0.4);
         }
+
+        /* ── Info tooltip (i) ───────────────────────────── */
+        .info-tip {
+            position: relative; display: inline-flex;
+            align-items: center; margin-left: 4px; cursor: help;
+            vertical-align: middle;
+        }
+        .info-tip-icon {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 13px; height: 13px; border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: rgba(255,255,255,0.32);
+            font-size: 0.58rem; font-style: normal;
+            font-family: var(--sans); font-weight: 700;
+            flex-shrink: 0; line-height: 1; user-select: none;
+            transition: border-color 0.12s, color 0.12s;
+        }
+        .info-tip:hover .info-tip-icon {
+            border-color: rgba(255,255,255,0.55);
+            color: rgba(255,255,255,0.7);
+        }
+        .info-tip-popup {
+            position: absolute;
+            bottom: calc(100% + 8px); left: 50%;
+            transform: translateX(-50%);
+            min-width: 210px; max-width: 260px;
+            background: #111827;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px; padding: 9px 12px;
+            font-size: 0.71rem; color: rgba(255,255,255,0.72);
+            line-height: 1.55; z-index: 1000;
+            pointer-events: none; opacity: 0; visibility: hidden;
+            transition: opacity 0.13s, visibility 0.13s;
+            white-space: normal; text-align: left;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+        }
+        .info-tip:hover .info-tip-popup { opacity: 1; visibility: visible; }
+        /* keep tooltip visible even when it overflows its card */
+        .info-tip-popup strong { color: #fff; font-weight: 600; }
     </style>
 </head>
 <body>
@@ -1062,7 +1101,10 @@
                                                 )}
                                                 {useRegional && (
                                                     <div className="data-row">
-                                                        <span className="data-key" style={{fontSize:'0.72rem'}}>Damodaran region</span>
+                                                        <span className="data-key" style={{fontSize:'0.72rem',display:'inline-flex',alignItems:'center'}}>
+                                                            Damodaran region
+                                                            <InfoTip text="Damodaran NYU Stern publishes separate Excel files for US, Australia, and Emerging Markets. Each file has region-specific industry growth benchmarks and a different GDP baseline. This stock uses the matching regional dataset so the tier classification reflects local market dynamics rather than US averages."/>
+                                                        </span>
                                                         <span className="data-val" style={{color:'var(--blue)',fontSize:'0.72rem'}}>{gd.region} regional dataset</span>
                                                     </div>
                                                 )}
@@ -1077,7 +1119,17 @@
                                             </div>
                                         );
 
-                                        // Tier chip colours
+                                        // ── Hover info tooltip ──────────────────────────
+                                        // Pure CSS hover — no state needed.
+                                        // Usage: <InfoTip text="explanation..." />
+                                        const InfoTip = ({text}) => (
+                                            <span className="info-tip">
+                                                <span className="info-tip-icon">i</span>
+                                                <span className="info-tip-popup">{text}</span>
+                                            </span>
+                                        );
+
+                                        // ── Tier chip colours ────────────────────────────
                                         const TIER_COLOR = {
                                             lagging:     '#f87171',  // red   — structurally below market
                                             market:      '#94a3b8',  // slate — tracking economy
@@ -1091,25 +1143,35 @@
                                             baseline:'Baseline',
                                         }[t] || t);
 
-                                        // Column panel for one g calculation
-                                        // rows: [{k, v, c?, chipColor?}]  — chipColor renders a pill badge
-                                        const GPanel = ({title, badge, badgeColor, rows, gLabel, gValue, gNote, isCapped, accentColor}) => (
+                                        // Column panel for one g calculation.
+                                        // rows: [{k, v, c?, chipColor?, tip?}]
+                                        //   tip       → shows (i) icon next to the row key label
+                                        //   chipColor → renders value as a coloured pill badge
+                                        // titleTip  → (i) next to panel title
+                                        // gLabelTip → (i) next to the result row label
+                                        const GPanel = ({title, titleTip, badge, badgeColor, rows,
+                                                         gLabel, gLabelTip, gValue, gNote, isCapped, accentColor}) => (
                                             <div style={{
                                                 background:'rgba(255,255,255,0.03)',
                                                 border:`1px solid ${accentColor}33`,
                                                 borderRadius:'10px',
                                                 padding:'12px 14px',
-                                                display:'flex', flexDirection:'column', gap:'0'
+                                                display:'flex', flexDirection:'column', gap:'0',
+                                                overflow:'visible',   /* allow tooltips to escape card */
                                             }}>
                                                 {/* panel header */}
                                                 <div style={{display:'flex',alignItems:'center',gap:'7px',marginBottom:'10px',paddingBottom:'8px',borderBottom:`1px solid ${accentColor}22`}}>
                                                     <span style={{color:accentColor,fontWeight:700,fontSize:'0.8rem'}}>{title}</span>
-                                                    <span style={{background:`${accentColor}22`,color:badgeColor,fontSize:'0.65rem',padding:'1px 6px',borderRadius:'4px',fontFamily:'var(--mono)'}}>{badge}</span>
+                                                    {titleTip && <InfoTip text={titleTip}/>}
+                                                    <span style={{background:`${accentColor}22`,color:badgeColor,fontSize:'0.65rem',padding:'1px 6px',borderRadius:'4px',fontFamily:'var(--mono)',marginLeft:titleTip?'2px':'0'}}>{badge}</span>
                                                 </div>
                                                 {/* data rows */}
                                                 {rows.map(r => r && (
-                                                    <div key={r.k} className="data-row" style={{padding:'2px 0'}}>
-                                                        <span style={{color:'var(--text-secondary)',fontSize:'0.75rem'}}>{r.k}</span>
+                                                    <div key={r.k} className="data-row" style={{padding:'2px 0',overflow:'visible'}}>
+                                                        <span style={{color:'var(--text-secondary)',fontSize:'0.75rem',display:'inline-flex',alignItems:'center'}}>
+                                                            {r.k}
+                                                            {r.tip && <InfoTip text={r.tip}/>}
+                                                        </span>
                                                         {r.chipColor
                                                             ? <span style={{background:r.chipColor+'28',color:r.chipColor,fontFamily:'var(--mono)',fontSize:'0.7rem',padding:'1px 8px',borderRadius:'4px',fontWeight:600}}>{r.v}</span>
                                                             : <span style={{color:r.c||'var(--text-secondary)',fontFamily:'var(--mono)',fontSize:'0.77rem'}}>{r.v}</span>
@@ -1117,8 +1179,11 @@
                                                     </div>
                                                 ))}
                                                 {/* result row */}
-                                                <div style={{marginTop:'9px',paddingTop:'9px',borderTop:`1px solid ${accentColor}22`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                                                    <span style={{color:'#fff',fontWeight:600,fontSize:'0.8rem'}}>{gLabel}{isCapped?' (capped)':''}</span>
+                                                <div style={{marginTop:'9px',paddingTop:'9px',borderTop:`1px solid ${accentColor}22`,display:'flex',justifyContent:'space-between',alignItems:'center',overflow:'visible'}}>
+                                                    <span style={{color:'#fff',fontWeight:600,fontSize:'0.8rem',display:'inline-flex',alignItems:'center'}}>
+                                                        {gLabel}{isCapped?' (capped)':''}
+                                                        {gLabelTip && <InfoTip text={gLabelTip}/>}
+                                                    </span>
                                                     <span style={{fontFamily:'var(--mono)',color:accentColor,fontWeight:700,fontSize:'1.0rem'}}>{gValue}</span>
                                                 </div>
                                                 {gNote && <p style={{color:'var(--text-secondary)',fontSize:'0.71rem',fontStyle:'italic',margin:'5px 0 0'}}>{gNote}</p>}
@@ -1145,36 +1210,44 @@
                                                             const eyIndustryPct = gd.industryHistGrowth != null
                                                                                   ? Number(gd.industryHistGrowth).toFixed(2)+'%' : 'N/A';
                                                             const eyFinalG      = earningsGrowthRate;
+                                                            const eyMultStr     = gd.eyCapMult!=null ? Number(gd.eyCapMult).toFixed(1) : '?';
 
                                                             const eyRows = [
                                                                 { k:'5yr EPS Forecast',
                                                                   v: eyIndustryPct, c:'var(--blue)' },
                                                                 { k:'Benchmark TM (actual)',
                                                                   v: eyBenchActual!=null ? Number(eyBenchActual).toFixed(2)+'%':'N/A' },
-                                                                // Show floor row only when it actually changed the benchmark
                                                                 eyFloored
                                                                     ? { k:'Eff. Benchmark (↑ floored)',
                                                                         v: Number(eyBenchEff).toFixed(2)+'%',
-                                                                        c:'rgba(94,173,255,0.5)' }
+                                                                        c:'rgba(94,173,255,0.5)',
+                                                                        tip:'The actual Total Market benchmark was below 50% of the GDP base — likely a data anomaly. A near-zero benchmark makes the ratio meaningless. The floor (0.5× GDP base) keeps the tier classification reliable without distorting the result.' }
                                                                     : null,
                                                                 { k:'Ratio (industry ÷ eff. bench)',
-                                                                  v: gd.eyRatio!=null ? Number(gd.eyRatio).toFixed(2)+'×':'N/A' },
+                                                                  v: gd.eyRatio!=null ? Number(gd.eyRatio).toFixed(2)+'×':'N/A',
+                                                                  tip:'How much faster (or slower) this sector\'s 5yr EPS consensus grows vs the total market. Used only to classify the sector tier — it does not directly scale g. A ratio close to 1.0× means the industry tracks the market.' },
                                                                 { k:'Sector tier',
                                                                   v: tierLabel(gd.eyTier),
-                                                                  chipColor: eyTierColor },
-                                                                { k:`EY Cap (${gd.eyCapMult!=null?Number(gd.eyCapMult).toFixed(1):'?'}× GDP)`,
-                                                                  v: eyCapPct, c:'rgba(94,173,255,0.6)' },
-                                                                { k:`GDP Base (${result.currency})`, v: gdpPct },
+                                                                  chipColor: eyTierColor,
+                                                                  tip:'Sectors are classified by ratio into four tiers. For EY g (short-term signal, above GDP allowed): Lagging <0.75× → cap 1.0× GDP. Market 0.75–1.5× → cap 1.5× GDP. Above avg 1.5–3× → cap 2.0× GDP. High growth ≥3× → cap 2.0× GDP. EY caps are more permissive than Gordon since 5yr forecasts reflect near-term momentum, not perpetuity.' },
+                                                                { k:`EY Cap (${eyMultStr}× GDP)`,
+                                                                  v: eyCapPct, c:'rgba(94,173,255,0.6)',
+                                                                  tip:`The maximum EY g allowed for this sector tier. EY g = min(5yr EPS forecast, this cap). The tier multiplier (${eyMultStr}×) reflects how much near-term industry outperformance we credit — more permissive than Gordon since the 5yr forecast is not a perpetuity rate.` },
+                                                                { k:`GDP Base (${result.currency})`,
+                                                                  v: gdpPct,
+                                                                  tip:'Long-run nominal GDP growth for this region — the anchor for all tier caps. US ≈ 2.5%, AU ≈ 2.5%, VN ≈ 5.5%. All cap multipliers are applied to this base, so higher-growth economies naturally have higher absolute ceilings.' },
                                                             ];
 
                                                             return (
                                                                 <GPanel
                                                                     title="Earnings Yield g"
+                                                                    titleTip="Short-term growth signal using Damodaran's 5-year analyst EPS consensus (histgr file). Captures current industry momentum. Above-GDP values are allowed since this is not a true perpetuity rate — it reflects near-term industry health. Used as the growth component in the Earnings Yield return model."
                                                                     badge="histgr · 5yr EPS"
                                                                     badgeColor="var(--blue)"
                                                                     accentColor="#5eadff"
                                                                     rows={eyRows}
                                                                     gLabel="EY g = min(5yr EPS, cap)"
+                                                                    gLabelTip="Final EY g is the smaller of: the raw 5yr EPS forecast, and the tier cap (mult × GDP). If the forecast is below the cap, the industry is growing modestly — use it directly. If above: near-term analyst optimism exceeds what the tier supports — use the cap."
                                                                     gValue={(eyFinalG*100).toFixed(2)+'%'}
                                                                     isCapped={gd.eyCapPct!=null && gd.industryHistGrowth!=null
                                                                               && gd.industryHistGrowth/100 > gd.eyCapPct/100 + 0.0005}
@@ -1194,6 +1267,7 @@
                                                                                  ? Number(gd.capPct).toFixed(1)+'%' : 'N/A';
                                                             const gIndustryPct = gd.industryEpsGrowth != null
                                                                                  ? Number(gd.industryEpsGrowth).toFixed(2)+'%' : 'N/A';
+                                                            const gMultStr     = gd.capMult!=null ? Number(gd.capMult).toFixed(1) : '?';
 
                                                             // gd.g = Damodaran tier result; result.dividendGrowth = after CAPM safety cap
                                                             const damodaranG = gd.g;
@@ -1204,33 +1278,45 @@
 
                                                             const gRows = [
                                                                 { k:'Fundamental (ROE×b)',
-                                                                  v: gIndustryPct, c:'var(--purple)' },
+                                                                  v: gIndustryPct, c:'var(--purple)',
+                                                                  tip:'ROE × retention ratio — the Du Pont sustainable growth identity. This is the rate a company can grow purely from reinvested earnings without needing external capital. Unlike analyst forecasts, this is an accounting identity grounded in the balance sheet.' },
                                                                 { k:'Benchmark TM (actual)',
-                                                                  v: gBenchActual!=null ? Number(gBenchActual).toFixed(2)+'%':'N/A' },
+                                                                  v: gBenchActual!=null ? Number(gBenchActual).toFixed(2)+'%':'N/A',
+                                                                  tip:'Damodaran\'s Total Market fundamental growth rate for this region. Used as the denominator in the ratio to classify this sector\'s relative growth strength.' },
                                                                 gFloored
                                                                     ? { k:'Eff. Benchmark (↑ floored)',
                                                                         v: Number(gBenchEff).toFixed(2)+'%',
-                                                                        c:'rgba(192,132,252,0.5)' }
+                                                                        c:'rgba(192,132,252,0.5)',
+                                                                        tip:'The actual Total Market benchmark was below 50% of the GDP base — likely a data anomaly (e.g. VN Total Market fundgr ≈ 0.67%). Without this floor, the ratio would be 14.9× instead of 3.6×, placing every VN sector in "High growth" regardless of actual performance. The floor at 0.5× GDP keeps the classification meaningful.' }
                                                                     : null,
                                                                 { k:'Ratio (industry ÷ eff. bench)',
-                                                                  v: gd.ratio!=null ? Number(gd.ratio).toFixed(2)+'×':'N/A' },
+                                                                  v: gd.ratio!=null ? Number(gd.ratio).toFixed(2)+'×':'N/A',
+                                                                  tip:'How much faster this sector\'s ROE×b grows vs the total market fundamental rate. Used only to classify the tier — it does not scale g directly. This controlled use replaces the old GDP×weight formula where the ratio was multiplied directly, causing explosions when the benchmark was near-zero.' },
                                                                 { k:'Sector tier',
                                                                   v: tierLabel(gd.tier),
-                                                                  chipColor: gTierColor },
-                                                                { k:`Gordon Cap (${gd.capMult!=null?Number(gd.capMult).toFixed(1):'?'}× GDP)`,
-                                                                  v: gCapPct, c:'rgba(192,132,252,0.6)' },
-                                                                { k:`GDP Base (${result.currency})`, v: gdpPct },
-                                                                // If CAPM cap further reduced the tiered g, show both
+                                                                  chipColor: gTierColor,
+                                                                  tip:'Sectors are classified by ratio into four tiers. For Gordon g (perpetuity, must anchor near GDP): Lagging <0.75× → cap 0.9× GDP. Market 0.75–1.5× → cap 1.0× GDP. Above avg 1.5–3× → cap 1.1× GDP. High growth ≥3× → cap 1.2× GDP. Even the highest tier only claims 20% above GDP forever — conservative by design, since competitive equilibrium erodes excess returns over time.' },
+                                                                { k:`Gordon Cap (${gMultStr}× GDP)`,
+                                                                  v: gCapPct, c:'rgba(192,132,252,0.6)',
+                                                                  tip:`Perpetuity g cannot be arbitrarily high. Cap = ${gMultStr}× GDP for this tier. In perpetuity, no company can sustainably outgrow the economy it operates in — competitive pressure erodes excess returns. The tier cap is the ceiling; if ROE×b is below it, we use ROE×b directly (the Du Pont rate is theoretically sound). If above, we apply the cap.` },
+                                                                { k:`GDP Base (${result.currency})`,
+                                                                  v: gdpPct,
+                                                                  tip:'Long-run nominal GDP growth for this region — the anchor for all perpetuity g caps. In equilibrium, no firm can grow faster than the economy forever. Higher-growth economies (VN ≈ 5.5%) naturally allow higher absolute ceilings than mature markets (US ≈ 2.5%).' },
                                                                 capmCapActive
                                                                     ? { k:'Tier g (before CAPM cap)',
                                                                         v: (damodaranG*100).toFixed(2)+'%',
-                                                                        c:'rgba(192,132,252,0.45)' }
+                                                                        c:'rgba(192,132,252,0.45)',
+                                                                        tip:'The Gordon model requires g < required return r (CAPM). If the tier result still exceeded r, a safety cap was applied: g = max(r − 3%, 3%). This row shows the tier result before that final adjustment.' }
                                                                     : null,
                                                             ];
 
                                                             const gordonLabel = capmCapActive
                                                                 ? 'Gordon g (CAPM safety cap)'
                                                                 : 'Gordon g = min(ROE×b, cap)';
+
+                                                            const gordonLabelTip = capmCapActive
+                                                                ? 'The tier cap result still exceeded the CAPM required return. The Gordon DDM formula P = D₁ ÷ (r − g) is undefined when g ≥ r, so a safety cap brings g below r. This is a mathematical constraint, not an economic judgment.'
+                                                                : 'Final Gordon g = min(ROE×b from fundgr, tier cap). If ROE×b < cap: the industry is within its sustainable ceiling — use the accounting identity directly. If ROE×b > cap: current profitability exceeds what is sustainable in perpetuity — apply the tier cap.';
 
                                                             const gordonNote = [
                                                                 gd.note,
@@ -1240,11 +1326,13 @@
                                                             return (
                                                                 <GPanel
                                                                     title="Gordon DDM g"
+                                                                    titleTip="Structural perpetuity rate from Damodaran's fundamental growth: ROE × retention ratio (fundgr file). This is the Du Pont sustainable growth identity — the rate a company can grow purely from retained earnings. Used as g in the Gordon Dividend Discount Model: Fair Price = D₁ ÷ (r − g). Capped near GDP since no industry can outgrow the economy forever."
                                                                     badge="fundgr · ROE×b"
                                                                     badgeColor="var(--purple)"
                                                                     accentColor="#c084fc"
                                                                     rows={gRows}
                                                                     gLabel={gordonLabel}
+                                                                    gLabelTip={gordonLabelTip}
                                                                     gValue={(finalG*100).toFixed(2)+'%'}
                                                                     isCapped={gd.capped || capmCapActive}
                                                                     gNote={gordonNote||undefined}
