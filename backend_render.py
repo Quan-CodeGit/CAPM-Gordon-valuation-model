@@ -125,12 +125,24 @@ def get_usd_vnd_rate():
         pass
     return 25500  # Fallback rate
 
-def map_tv_to_damodaran(sector, industry):
+def map_tv_to_damodaran(sector, industry, company_name=None):
     """Map TradingView sector/industry strings to the nearest Damodaran industry name.
     Uses case-insensitive substring matching; most-specific checks come first.
+
+    Fallback chain:
+      1. industry + sector strings (TradingView classification fields)
+      2. company_name (TradingView 'description') — used when sector=None, industry=None,
+         which happens for many VN/AU stocks that TradingView does not classify.
+
     Returns None if no match found (caller falls back to historical growth).
     """
     s = f"{industry or ''} {sector or ''}".lower().strip()
+
+    # Fallback: use company name when TradingView has no sector/industry data
+    if not s and company_name:
+        s = company_name.lower().strip()
+        print(f"[AUTO-NAME] No sector/industry — classifying from company name: {company_name!r}")
+
     if not s:
         return None
 
@@ -329,6 +341,74 @@ def map_tv_to_damodaran(sector, industry):
         return 'Information Services'
     if any(x in s for x in ['education', 'school', 'university', 'training']):
         return 'Education'
+
+    # ---- Company-name specific patterns (VN/AU stocks TradingView doesn't classify) ----
+    # These run on the company description when sector/industry are both None.
+    # Keep more-specific patterns above more-generic ones.
+
+    # Food & Beverage (name-based)
+    if any(x in s for x in ['dairy', 'milk', 'vinamilk']):
+        return 'Food Processing'
+    if any(x in s for x in ['brewery', 'brewing', 'sabeco', 'habeco', 'heineken']):
+        return 'Beverage (Alcoholic)'
+    if any(x in s for x in ['sugar', 'rice', 'flour', 'milling', 'agrifood']):
+        return 'Food Processing'
+
+    # Energy & Resources (name-based)
+    if any(x in s for x in ['petrolimex', 'petrovietnam', 'pvn', 'pvgas', 'pv gas',
+                             'pv power', 'pvpower', 'petroleum group']):
+        return 'Oil/Gas (Integrated)'
+    if any(x in s for x in ['power corporation', 'electricity corporation',
+                             'power generation', 'hydropower', 'thermal power',
+                             'wind power', 'solar power']):
+        return 'Power'
+    if any(x in s for x in ['coal corporation', 'vinacomin']):
+        return 'Coal & Related Energy'
+
+    # Materials & Mining (name-based)
+    if any(x in s for x in ['hoa phat', 'hoaphat', 'pomina', 'vnsteel']):
+        return 'Steel'
+    if any(x in s for x in ['cement', 'vicem', 'vissai']):
+        return 'Building Materials'
+
+    # Banking & Finance (name-based)
+    if any(x in s for x in ['vietcombank', 'vietinbank', 'bidv', 'agribank',
+                             'techcombank', 'vpbank', 'mbbank', 'sacombank',
+                             'acb bank', 'hdbank', 'seabank', 'ocb bank',
+                             'commonwealth bank', 'westpac', 'national australia',
+                             'anz bank', 'macquarie bank', 'bendigo', 'bank of']):
+        return 'Banks (Regional)'
+    if any(x in s for x in ['bao viet', 'baoviet', 'pvi insurance', 'bic insurance',
+                             'manulife', 'prudential vietnam', 'aia vietnam']):
+        return 'Insurance (General)'
+    if any(x in s for x in ['securities', 'chứng khoán', 'ssi ', 'vnd securities',
+                             'hsc securities', 'vps securities']):
+        return 'Brokerage & Investment Banking'
+
+    # Real Estate (name-based)
+    if any(x in s for x in ['vinhomes', 'novaland', 'khang dien', 'nam long',
+                             'dat xanh', 'phat dat', 'hai phat']):
+        return 'Real Estate (Development)'
+
+    # Technology (name-based)
+    if any(x in s for x in ['fpt corporation', 'vng corporation', 'cmc corporation',
+                             'misa', 'viettel', 'vnpt']):
+        return 'Software (System & Application)'
+
+    # Retail & Consumer (name-based)
+    if any(x in s for x in ['masan consumer', 'masan group']):
+        return 'Food Processing'  # Masan is primarily food/consumer goods
+    if any(x in s for x in ['the gioi di dong', 'mobile world', 'fpt retail',
+                             'digiworld', 'pnt retail']):
+        return 'Retail (Electronics)'
+
+    # Transportation & Logistics (name-based)
+    if any(x in s for x in ['vietnam airlines', 'vietjet', 'bamboo airways',
+                             'pacific airlines']):
+        return 'Air Transport'
+    if any(x in s for x in ['gemadept', 'viconship', 'seaports', 'port corporation',
+                             'sotrans', 'transimex']):
+        return 'Transportation'
 
     # ---- Broad sector fallbacks ----
     if any(x in s for x in ['finance', 'financial']):
@@ -908,8 +988,9 @@ def get_valuation(ticker):
         industry_growth_info = None
         auto_detected_industry = None
         industry_suggestions = []
-        raw_tv_sector = tv_data.get('tvSector') if tv_data else None
-        raw_tv_industry = tv_data.get('tvIndustry') if tv_data else None
+        raw_tv_sector   = tv_data.get('tvSector')    if tv_data else None
+        raw_tv_industry = tv_data.get('tvIndustry')  if tv_data else None
+        raw_company_name = tv_data.get('companyName') if tv_data else None
 
         if growth_override_param:
             try:
@@ -927,11 +1008,12 @@ def get_valuation(ticker):
             # Determine which industry to use (manual param or auto-detected from TV)
             effective_industry = industry
             if not effective_industry:
-                # Auto-detect from TradingView sector/industry fields
-                effective_industry = map_tv_to_damodaran(raw_tv_sector, raw_tv_industry)
+                # Auto-detect: try sector/industry first, then company name as fallback
+                effective_industry = map_tv_to_damodaran(
+                    raw_tv_sector, raw_tv_industry, raw_company_name)
                 auto_detected_industry = effective_industry
                 if effective_industry:
-                    print(f"[AUTO] {ticker}: TV sector={raw_tv_sector!r}, industry={raw_tv_industry!r} → Damodaran={effective_industry!r}")
+                    print(f"[AUTO] {ticker}: TV sector={raw_tv_sector!r}, industry={raw_tv_industry!r}, name={raw_company_name!r} → Damodaran={effective_industry!r}")
                 else:
                     print(f"[AUTO] {ticker}: No sector match, computing suggestions")
                     industry_suggestions = suggest_damodaran_industries(raw_tv_sector, raw_tv_industry)
