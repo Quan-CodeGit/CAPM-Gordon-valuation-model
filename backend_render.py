@@ -412,24 +412,34 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         if not data:
             return None
 
-        # Debug: log all key field groups for VN stocks (covers HOSE / HNX / UPCOM)
-        if is_vn_stock:
+        # Debug: log all key field groups for VN and AU stocks
+        if is_vn_stock or is_au_stock:
+            # Sector/industry classification fields — helps identify which field TV uses per exchange
+            cls_fields  = {k: data.get(k) for k in data.keys()
+                           if any(x in k.lower() for x in ['sector', 'industry', 'type', 'subtype', 'category'])}
             eps_fields  = {k: data.get(k) for k in data.keys() if 'eps' in k.lower() or 'earning' in k.lower()}
             pe_fields   = {k: data.get(k) for k in data.keys() if 'p/e' in k.lower() or 'pe' in k.lower() or 'price_earning' in k.lower()}
             beta_fields = {k: data.get(k) for k in data.keys() if 'beta' in k.lower()}
             div_fields  = {k: data.get(k) for k in data.keys() if 'div' in k.lower() or 'yield' in k.lower()}
-            print(f"[DEBUG TV] {ticker} ({exchange}) beta fields : {beta_fields}")
-            print(f"[DEBUG TV] {ticker} ({exchange}) EPS fields  : {eps_fields}")
-            print(f"[DEBUG TV] {ticker} ({exchange}) P/E fields  : {pe_fields}")
-            print(f"[DEBUG TV] {ticker} ({exchange}) div fields  : {div_fields}")
+            print(f"[DEBUG TV] {ticker} ({exchange}) classification: {cls_fields}")
+            print(f"[DEBUG TV] {ticker} ({exchange}) beta fields   : {beta_fields}")
+            print(f"[DEBUG TV] {ticker} ({exchange}) EPS fields    : {eps_fields}")
+            print(f"[DEBUG TV] {ticker} ({exchange}) P/E fields    : {pe_fields}")
+            print(f"[DEBUG TV] {ticker} ({exchange}) div fields    : {div_fields}")
 
-        # Extract sector/industry classification from TradingView
-        tv_sector = data.get('sector', None) or data.get('type_specific', None)
-        tv_industry = (
-            data.get('industry', None)
-            or data.get('industry_group', None)
-            or data.get('subtype', None)
-        )
+        # Extract sector/industry classification from TradingView.
+        # IMPORTANT: only use genuine classification fields.
+        # - 'subtype'      = stock type ("common", "etf", "preferred") — NOT an industry
+        # - 'type_specific' = also a type indicator, not a sector
+        # Use None rather than falling through to type fields, so map_tv_to_damodaran
+        # receives None and the caller shows the suggestion UI instead of misclassifying.
+        _sector_raw   = data.get('sector') or data.get('industry_group') or None
+        _industry_raw = data.get('industry') or None
+
+        # Strip whitespace; treat blank strings the same as missing
+        tv_sector   = _sector_raw.strip()   if isinstance(_sector_raw,   str) and _sector_raw.strip()   else None
+        tv_industry = _industry_raw.strip() if isinstance(_industry_raw, str) and _industry_raw.strip() else None
+
         print(f"[DEBUG TV] {ticker} sector={tv_sector!r}, industry={tv_industry!r}")
 
         current_price = data.get('close', 0)
