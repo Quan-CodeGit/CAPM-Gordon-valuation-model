@@ -1156,7 +1156,21 @@ def get_valuation(ticker):
             }
         }
 
-        _cache[cache_key] = result
+        # Only cache results that used real regional Damodaran data.
+        # If we fell back to the legacy US histgr seed (using_regional_data=False),
+        # the regional Excels probably haven't loaded yet (Render cold start).
+        # Caching that stale result would serve wrong US data to VN/AU stocks for
+        # the rest of the cache bucket — so skip caching, let the next request retry.
+        is_legacy_fallback = (
+            industry_growth_info is not None
+            and industry_growth_info.get('method') == 'industry'
+            and not industry_growth_info.get('using_regional_data', False)
+        )
+        if not is_legacy_fallback:
+            _cache[cache_key] = result
+        else:
+            print(f"[CACHE] Skipping cache for {ticker} — legacy fallback (regional data not ready)")
+
         print(f"[OK] Processed {ticker} - {valuation}")
 
         return jsonify(result)

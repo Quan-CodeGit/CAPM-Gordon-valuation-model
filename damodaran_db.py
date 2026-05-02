@@ -494,17 +494,35 @@ def calculate_industry_growth(industry_name, currency='USD'):
                                     industry_name, is_ey=True)
             g_ey_source = (f'Damodaran {source_year} {region} — '
                            f'{industry_name} (5yr EPS, {r_ey["tier"]} tier)')
+            ey_tier     = r_ey['tier']
+            ey_ratio    = r_ey['ratio']
+            ey_eff_bench = r_ey['effective_bench_pct']
+            ey_cap_mult  = r_ey['cap_mult']
+            ey_cap_pct   = r_ey['cap_pct']
+            ey_g         = r_ey['g']
+            ey_note      = r_ey['note']
         else:
-            r_ey = {**r_g,
-                    'note': 'Historical EPS data unavailable — using fundamental growth'}
+            # histgr data missing (benchmark not loaded or industry not in histgr file).
+            # Fall back to fundamental g as proxy; mark all EY breakdown fields as None
+            # so the frontend can show a clear "no data" state instead of misleadingly
+            # copying Gordon's tier/ratio into the EY panel.
+            r_ey = None
             g_ey_source = (f'Damodaran {source_year} {region} — '
-                           f'{industry_name} (fundamental, EPS n/a)')
+                           f'{industry_name} (fundamental proxy, histgr n/a)')
+            ey_tier     = None
+            ey_ratio    = None
+            ey_eff_bench = None
+            ey_cap_mult  = None
+            ey_cap_pct   = None
+            ey_g         = r_g['g']   # best proxy: use Gordon g
+            ey_note      = ('5yr EPS data unavailable for this industry/region — '
+                            'EY g uses fundamental ROE×b as proxy')
 
         return {
             'g':                      r_g['g'],
-            'earnings_yield_g':       r_ey['g'],
+            'earnings_yield_g':       ey_g,
             'note':                   r_g['note'],
-            'earnings_yield_g_note':  r_ey['note'],
+            'earnings_yield_g_note':  ey_note,
             'capped':                 r_g['capped'],
             'source':                 (f'Damodaran {source_year} {region} — '
                                        f'{industry_name} (fundgr, {r_g["tier"]} tier)'),
@@ -518,12 +536,12 @@ def calculate_industry_growth(industry_name, currency='USD'):
             'weight':                 None,   # deprecated (was GDP×weight)
             'industry_eps_growth':    fund_g_pct,
             'benchmark_eps_growth':   fund_bm_pct,
-            # EY tier breakdown (histgr)
-            'ey_tier':                r_ey['tier'],
-            'ey_ratio':               r_ey['ratio'],
-            'ey_effective_benchmark': r_ey['effective_bench_pct'],
-            'ey_cap_mult':            r_ey['cap_mult'],
-            'ey_cap_pct':             r_ey['cap_pct'],
+            # EY tier breakdown (histgr) — all None when histgr data unavailable
+            'ey_tier':                ey_tier,
+            'ey_ratio':               ey_ratio,
+            'ey_effective_benchmark': ey_eff_bench,
+            'ey_cap_mult':            ey_cap_mult,
+            'ey_cap_pct':             ey_cap_pct,
             'earnings_yield_weight':  None,   # deprecated
             'industry_hist_growth':   hist_g_pct,
             'benchmark_hist_growth':  hist_bm_pct,
@@ -924,15 +942,20 @@ def fetch_damodaran_excel(url, dataset_type):
 
         results.append((name, growth_pct))
 
-    # ── Sentinel filtering ────────────────────────────────────────────────────
+    # ── Sentinel filtering (fundgr only) ─────────────────────────────────────
     # Damodaran uses 7.0 (and occasionally other large values) as a sentinel for
-    # "not meaningful / insufficient data" in fundgr files.  Replace those with None
-    # so they don't interfere with the decimal-format detection below.
-    SENTINEL_THRESHOLD = 3.0   # any value above this is treated as N/A
-    results = [
-        (n, None if (g is not None and abs(g) > SENTINEL_THRESHOLD) else g)
-        for n, g in results
-    ]
+    # "not meaningful / insufficient data" — but ONLY in fundgr (ROE×b) files.
+    # histgr files store 5yr EPS forecasts; valid values range 0–50%+ (decimal
+    # format: 0.30 = 30%).  Applying a 3.0 sentinel would silently kill any
+    # benchmark row where the EPS % is stored as a raw % value (e.g. 13.95),
+    # leaving hist_bm_pct=None and breaking EY for every regional stock.
+    if dataset_type == 'fundamental':
+        SENTINEL_THRESHOLD = 3.0   # any fundgr value above this is a Damodaran N/A sentinel
+        results = [
+            (n, None if (g is not None and abs(g) > SENTINEL_THRESHOLD) else g)
+            for n, g in results
+        ]
+    # histgr: no sentinel — let decimal-format detection handle the conversion
 
     # ── Decimal-vs-percent auto-detection ────────────────────────────────────
     # All current Damodaran Excel files store values as decimals (0.1395 = 13.95%).
@@ -984,9 +1007,11 @@ def refresh_regional_data():
                 continue
 
             count = 0
-            has_benchmark = any(n.strip() == 'Total Market' for n, _ in rows)
+            # Case-insensitive benchmark detection: Damodaran's regional files use
+            # "Total Market" but occasionally "Total market" or with extra spacing.
+            has_benchmark = any('total market' in n.strip().lower() for n, _ in rows)
             for name, growth_pct in rows:
-                is_benchmark = 1 if name.strip() == 'Total Market' else 0
+                is_benchmark = 1 if 'total market' in name.strip().lower() else 0
                 try:
                     c.execute('''
                         INSERT INTO damodaran_regional

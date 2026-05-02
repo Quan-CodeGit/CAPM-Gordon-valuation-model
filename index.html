@@ -1200,6 +1200,43 @@
 
                                                         {/* ── EY g panel ── histgr 5yr EPS, short-term, above GDP allowed */}
                                                         {(() => {
+                                                            const eyFinalG      = earningsGrowthRate;
+                                                            // eyTier is null when histgr data wasn't available for this industry/region
+                                                            const eyHasData     = gd.eyTier != null;
+
+                                                            if (!eyHasData) {
+                                                                // ── Fallback state: no histgr benchmark ─────────────────────
+                                                                // Damodaran's histgr file either didn't include this industry or
+                                                                // the Total Market benchmark row wasn't loaded.
+                                                                // EY g falls back to Gordon's fundamental ROE×b as a proxy.
+                                                                const eyIndustryPct = gd.industryHistGrowth != null
+                                                                    ? Number(gd.industryHistGrowth).toFixed(2)+'%'
+                                                                    : null;
+                                                                const fallbackRows = [
+                                                                    eyIndustryPct
+                                                                        ? { k:'5yr EPS Forecast', v: eyIndustryPct, c:'var(--blue)',
+                                                                            tip:'Industry 5yr EPS data was found but the Total Market benchmark is unavailable — ratio/tier cannot be computed. EY g uses fundamental ROE×b as proxy.' }
+                                                                        : { k:'5yr EPS Forecast', v:'No data', c:'#64748b' },
+                                                                    { k:'Benchmark TM', v:'Not loaded', c:'#64748b' },
+                                                                ];
+                                                                return (
+                                                                    <GPanel
+                                                                        title="Earnings Yield g"
+                                                                        titleTip="Short-term growth signal using Damodaran's 5-year analyst EPS consensus (histgr file). No benchmark data is available for this industry/region, so EY g uses the fundamental ROE×b as a conservative proxy."
+                                                                        badge="histgr · no data"
+                                                                        badgeColor="#64748b"
+                                                                        accentColor="#5eadff"
+                                                                        rows={fallbackRows}
+                                                                        gLabel="EY g = ROE×b proxy"
+                                                                        gLabelTip="Damodaran's histgr file (5yr EPS forecasts) doesn't have a Total Market benchmark for this region/industry. Without a benchmark, tier classification is not possible. EY g falls back to the fundamental ROE×b rate from the Gordon panel — a conservative proxy."
+                                                                        gValue={(eyFinalG*100).toFixed(2)+'%'}
+                                                                        isCapped={false}
+                                                                        gNote={gd.earnings_yield_g_note}
+                                                                    />
+                                                                );
+                                                            }
+
+                                                            // ── Normal state: histgr data available ─────────────────────────
                                                             const eyTierColor = TIER_COLOR[gd.eyTier] || '#94a3b8';
                                                             const eyBenchActual = gd.benchmarkHistGrowth;
                                                             const eyBenchEff    = gd.eyEffectiveBenchmark;
@@ -1209,7 +1246,6 @@
                                                                                   ? Number(gd.eyCapPct).toFixed(1)+'%' : 'N/A';
                                                             const eyIndustryPct = gd.industryHistGrowth != null
                                                                                   ? Number(gd.industryHistGrowth).toFixed(2)+'%' : 'N/A';
-                                                            const eyFinalG      = earningsGrowthRate;
                                                             const eyMultStr     = gd.eyCapMult!=null ? Number(gd.eyCapMult).toFixed(1) : '?';
 
                                                             const eyRows = [
