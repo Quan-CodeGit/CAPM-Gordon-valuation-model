@@ -751,16 +751,53 @@
          *   US  — S&P 500 Dividend Aristocrats (25+ consecutive years of increases)
          *   AU  — ASX mature income stocks with stable franked dividend history
          * ────────────────────────────────────────────────────────────────── */
+        // Curated DDM-suitable stocks — consistent dividend payers that fit the Gordon model well.
+        // streak  = consecutive years of dividend increases (US Dividend Aristocrats / Champions)
+        // franked = eligible for Australian franking credit tax offset
+        // ddm     = single-stage (mature, slow-growth) | 2-stage (higher near-term growth)
         const RECS = {
-            VN: [['VNM','Vinamilk'],['SAB','Sabeco'],['GAS','PVGas'],['BVH','Bao Viet'],
-                 ['REE','REE Corp'],['DHG','DHG Pharma'],['PNJ','PNJ Gold'],['VCB','Vietcombank'],
-                 ['FPT','FPT Corp'],['DGW','Digiworld'],['MWG','Mobile World'],['PLX','Petrolimex']],
-            US: [['KO','Coca-Cola'],['PG','P&G'],['JNJ','J&J'],['PEP','PepsiCo'],
-                 ['MCD','McDonald\'s'],['WMT','Walmart'],['CL','Colgate'],['ABT','Abbott'],
-                 ['AFL','Aflac'],['EMR','Emerson'],['CAT','Caterpillar'],['KMB','Kimberly-Clark']],
-            AU: [['CBA','CommBank'],['NAB','NAB'],['WBC','Westpac'],['ANZ','ANZ'],
-                 ['WES','Wesfarmers'],['WOW','Woolworths'],['TLS','Telstra'],['APA','APA Group'],
-                 ['BHP','BHP'],['TCL','Transurban'],['MQG','Macquarie'],['CSL','CSL']],
+            VN: [
+                { ticker:'VEA',  name:'Vietnam Engine & Agri',    sector:'Industrials',        ddm:'single-stage' },
+                { ticker:'GAS',  name:'PV Gas',                   sector:'Energy / Utilities', ddm:'2-stage'      },
+                { ticker:'PLX',  name:'Petrolimex',               sector:'Energy / Retail',    ddm:'2-stage'      },
+                { ticker:'FPT',  name:'FPT Corporation',          sector:'Technology',         ddm:'2-stage'      },
+                { ticker:'REE',  name:'REE Corporation',          sector:'Utilities / Infra',  ddm:'single-stage' },
+                { ticker:'VCB',  name:'Vietcombank',              sector:'Banking',            ddm:'2-stage'      },
+                { ticker:'BID',  name:'BIDV',                     sector:'Banking',            ddm:'2-stage'      },
+                { ticker:'CTG',  name:'VietinBank',               sector:'Banking',            ddm:'2-stage'      },
+                { ticker:'QNS',  name:'Quang Ngai Sugar',         sector:'Consumer Staples',   ddm:'single-stage' },
+                { ticker:'MBB',  name:'MB Bank',                  sector:'Banking',            ddm:'2-stage'      },
+                { ticker:'ACB',  name:'Asia Commercial Bank',     sector:'Banking',            ddm:'2-stage'      },
+                { ticker:'DPM',  name:'PetroVietnam Fertilizer',  sector:'Chemicals',          ddm:'2-stage'      },
+            ],
+            US: [
+                { ticker:'KO',   name:"Coca-Cola",                sector:'Beverages',              ddm:'single-stage', streak:63 },
+                { ticker:'PG',   name:"Procter & Gamble",         sector:'Consumer Goods',         ddm:'single-stage', streak:69 },
+                { ticker:'JNJ',  name:"Johnson & Johnson",        sector:'Healthcare',             ddm:'single-stage', streak:62 },
+                { ticker:'SO',   name:"Southern Company",         sector:'Utilities',              ddm:'single-stage', streak:25 },
+                { ticker:'O',    name:"Realty Income",            sector:'REIT',                   ddm:'single-stage', streak:30 },
+                { ticker:'MCD',  name:"McDonald's",               sector:'Restaurants',            ddm:'single-stage', streak:48 },
+                { ticker:'WMT',  name:"Walmart",                  sector:'Retail',                 ddm:'single-stage', streak:51 },
+                { ticker:'MMM',  name:"3M",                       sector:'Industrials',            ddm:'single-stage', streak:60 },
+                { ticker:'ABT',  name:"Abbott Laboratories",      sector:'Medical Devices',        ddm:'single-stage', streak:53 },
+                { ticker:'TROW', name:"T. Rowe Price",            sector:'Asset Management',       ddm:'single-stage', streak:39 },
+                { ticker:'LOW',  name:"Lowe's Companies",         sector:'Home Improvement',       ddm:'single-stage', streak:62 },
+                { ticker:'EMR',  name:"Emerson Electric",         sector:'Industrial Automation',  ddm:'single-stage', streak:48 },
+            ],
+            AU: [
+                { ticker:'WES',  name:'Wesfarmers',               sector:'Retail',               ddm:'single-stage', franked:true  },
+                { ticker:'TCL',  name:'Transurban',               sector:'Infrastructure',       ddm:'single-stage', franked:false },
+                { ticker:'APA',  name:'APA Group',                sector:'Gas Infrastructure',   ddm:'single-stage', franked:false },
+                { ticker:'CSL',  name:'CSL Limited',              sector:'Healthcare / Biotech', ddm:'2-stage',      franked:false },
+                { ticker:'SOL',  name:'Washington H. Soul Patt.', sector:'Diversified / LIC',    ddm:'single-stage', franked:true  },
+                { ticker:'CBA',  name:'Commonwealth Bank',        sector:'Banking',              ddm:'2-stage',      franked:true  },
+                { ticker:'MQG',  name:'Macquarie Group',          sector:'Investment Banking',   ddm:'2-stage',      franked:false },
+                { ticker:'IAG',  name:'Insur. Australia Group',   sector:'Insurance',            ddm:'single-stage', franked:true  },
+                { ticker:'SHL',  name:'Sonic Healthcare',         sector:'Healthcare Services',  ddm:'single-stage', franked:false },
+                { ticker:'COL',  name:'Coles Group',              sector:'Consumer Staples',     ddm:'single-stage', franked:true  },
+                { ticker:'MPL',  name:'Medibank Private',         sector:'Health Insurance',     ddm:'single-stage', franked:true  },
+                { ticker:'ARG',  name:'Argo Investments',         sector:'Listed Inv. Company',  ddm:'single-stage', franked:true  },
+            ],
         };
 
         const isBull = primaryValuation === 'UNDERVALUED';
@@ -827,16 +864,19 @@
                         ))}
                     </div>
                     <div className="section-label" style={{ marginBottom:'7px' }}>
-                        {market==='US' ? 'Dividend Aristocrats — 25+ years consecutive increases'
-                         : market==='AU' ? 'ASX Mature Income Stocks — stable franked dividends'
-                         : 'HOSE Blue-Chips — consistent dividend track record'}
+                        {market==='US' ? 'Dividend Aristocrats — consecutive growth streak shown in ★ years'
+                         : market==='AU' ? 'ASX Income Stocks — F = fully franked dividend'
+                         : 'HOSE Blue-Chips — consistent dividend payers, DDM-suitable'}
                     </div>
                     <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
-                        {(RECS[market]||[]).map(([sym,name]) => (
-                            <button key={sym} className="tkr-pill" title={name}
+                        {(RECS[market]||[]).map(({ticker: sym, name, streak, franked, ddm}) => (
+                            <button key={sym} className="tkr-pill"
+                                title={`${name}${ddm ? ' · ' + ddm + ' DDM' : ''}`}
                                 onClick={() => { setTicker(sym); calculateValuation(null, sym); }}>
                                 <span className="tkr-sym">{sym}</span>
                                 <span style={{ color:'var(--text-dim)', marginLeft:'4px' }}>{name}</span>
+                                {streak != null && <span style={{ fontSize:'0.65rem', color:'#f59e0b', marginLeft:'5px', opacity:0.85 }}>{streak}y★</span>}
+                                {franked === true && <span style={{ fontSize:'0.65rem', color:'#34d399', marginLeft:'4px', opacity:0.85 }}>F</span>}
                             </button>
                         ))}
                     </div>
