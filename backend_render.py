@@ -479,10 +479,14 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         overview = Overview()
         data = None
 
+        # Request beta_5_year explicitly — the library's default VOLATILITY_FIELDS
+        # only includes beta_1_year. We append beta_5_year so it arrives in data.
+        extra_fields = list(Overview.ALL_FIELDS) + ['beta_5_year']
+
         for exchange in exchanges:
             try:
                 tv_symbol = f"{exchange}:{ticker}"
-                result = overview.get_symbol_overview(symbol=tv_symbol)
+                result = overview.get_symbol_overview(symbol=tv_symbol, fields=extra_fields)
                 if result and 'data' in result:
                     data = result['data']
                     break
@@ -526,17 +530,13 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         company_name = data.get('description', ticker)
 
         # ── Beta ──────────────────────────────────────────────────────────────
-        # TradingView field naming:
-        #   'beta_5_year'  — explicit 5yr field (may not always be present)
-        #   'beta'         — TradingView's DEFAULT beta, which is the 5yr measure
-        #   'beta_3_year'  — explicit 3yr
-        #   'beta_1_year'  — explicit 1yr (shortest window, most noise)
-        # Preferred order: explicit 5yr → TV default (5yr) → 3yr → 1yr → 1.0
-        # Use explicit is-not-None checks (not `or`) so 0.0 and negative betas
-        # are accepted — both are valid for defensive/inverse-correlated stocks.
+        # Overview only requests beta_1_year by default; we add beta_5_year to
+        # extra_fields above. Fallback: 5yr → 1yr → estimated 1.0.
+        # 'beta' (generic) is excluded — it returned inconsistent values.
+        # Use explicit is-not-None checks so 0.0 and negative betas are kept.
         beta = 1.0
         beta_estimated = True
-        for _bf in ('beta_5_year', 'beta', 'beta_3_year', 'beta_1_year'):
+        for _bf in ('beta_5_year', 'beta_1_year'):
             _bv = data.get(_bf)
             if _bv is not None:
                 try:
