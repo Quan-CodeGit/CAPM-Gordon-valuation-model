@@ -526,21 +526,20 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         company_name = data.get('description', ticker)
 
         # ── Beta ──────────────────────────────────────────────────────────────
-        # TradingView returns 0.0 (not None) for thinly-traded UPCOM/HNX stocks.
         # Fallback chain: beta_1_year → beta_5_year → beta_3_year → beta → 1.0
-        beta_raw = (data.get('beta_1_year') or data.get('beta_5_year') or
-                    data.get('beta_3_year') or data.get('beta'))
-        try:
-            beta_val = float(beta_raw) if beta_raw else 0.0
-            if beta_val > 0:
-                beta = beta_val
-                beta_estimated = False
-            else:
-                beta = 1.0
-                beta_estimated = True   # no real beta data — using market-average assumption
-        except (ValueError, TypeError):
-            beta = 1.0
-            beta_estimated = True
+        # Use explicit is-not-None checks (not `or`) so 0.0 and negative betas
+        # are accepted — both are valid for defensive/inverse-correlated stocks.
+        beta = 1.0
+        beta_estimated = True
+        for _bf in ('beta_1_year', 'beta_5_year', 'beta_3_year', 'beta'):
+            _bv = data.get(_bf)
+            if _bv is not None:
+                try:
+                    beta = float(_bv)
+                    beta_estimated = False
+                except (ValueError, TypeError):
+                    pass
+                break
 
         # ── Dividend ──────────────────────────────────────────────────────────
         dividend_yield_percent = data.get('dividends_yield') or 0

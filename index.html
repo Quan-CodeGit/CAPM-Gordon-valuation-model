@@ -1043,8 +1043,10 @@
                                                 <div style={{ fontSize:'0.67rem', color:'var(--gold)', marginTop:'3px' }}>Using β=1.0 (market avg)</div>
                                               </>
                                             : <>
-                                                <div className="metric-val" style={{ color:'var(--blue)' }}>{result.beta.toFixed(3)}</div>
-                                                <div style={{ fontSize:'0.67rem', color:'var(--text-dim)', marginTop:'3px' }}>Market sensitivity</div>
+                                                <div className="metric-val" style={{ color: result.beta < 0 ? 'var(--gold)' : 'var(--blue)' }}>{result.beta.toFixed(3)}</div>
+                                                <div style={{ fontSize:'0.67rem', color:'var(--text-dim)', marginTop:'3px' }}>
+                                                    {result.beta < 0 ? 'Inverse market correlation' : result.beta < 0.5 ? 'Low market sensitivity' : 'Market sensitivity'}
+                                                </div>
                                               </>
                                         }
                                     </div>
