@@ -871,7 +871,7 @@
                     <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
                         {(RECS[market]||[]).map(({ticker: sym, name, streak, franked, ddm}) => (
                             <button key={sym} className="tkr-pill"
-                                title={`${name}${ddm ? ' · ' + ddm + ' DDM' : ''}`}
+                                title={name}
                                 onClick={() => { setTicker(sym); calculateValuation(null, sym); }}>
                                 <span className="tkr-sym">{sym}</span>
                                 <span style={{ color:'var(--text-dim)', marginLeft:'4px' }}>{name}</span>
