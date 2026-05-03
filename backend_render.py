@@ -923,9 +923,35 @@ def get_valuation(ticker):
             source = tv_data['source']
 
             # Dividend source priority:
-            # 1. TradingView dividends_per_share_fy — actual FY annual (most accurate, matches TV chart)
-            # 2. yfinance TTM sum — only used when TV has no FY data (falls back to yield × price estimate)
-            if tv_data.get('hasFYDividend'):
+            #
+            # AU stocks: TradingView's dividends_per_share_fy is in USD (like EPS),
+            # but current_price and all our calculations are in AUD.  Using it
+            # directly produces a currency-mismatch payout ratio inflated by
+            # ~1/AUD-rate (e.g. 141 % instead of 100 % for TLS).  We skip it and
+            # always derive AUD dividend from sources that are inherently in AUD:
+            #   1. yfinance TTM sum (payments in AUD, frequency auto-detected)
+            #   2. TV dividend yield × AUD price (yield is currency-neutral)
+            #
+            # US stocks: TV FY dividend is already in USD — same as price → safe to use.
+            #   1. TradingView dividends_per_share_fy (USD, most accurate FY figure)
+            #   2. yfinance TTM sum
+            #   3. yield × price fallback
+            if is_au_stock:
+                # Always derive AUD dividend to avoid USD/AUD mismatch
+                ttm_div = get_ttm_dividend(ticker, is_au_stock=True)
+                if ttm_div and ttm_div > 0:
+                    dividend_rate = ttm_div
+                    print(f"[DEBUG] {ticker} Using yfinance TTM dividend (AUD): {dividend_rate:.4f}")
+                else:
+                    # yield × price is currency-neutral → AUD
+                    yield_div = current_price * tv_data.get('dividendYield', 0)
+                    if yield_div > 0:
+                        dividend_rate = yield_div
+                        print(f"[DEBUG] {ticker} Using TV yield × price (AUD): {dividend_rate:.4f}")
+                    else:
+                        dividend_rate = 0.0
+                        print(f"[DEBUG] {ticker} No AUD dividend data available")
+            elif tv_data.get('hasFYDividend'):
                 dividend_rate = tv_data['dividend']
                 print(f"[DEBUG] {ticker} Using TradingView FY dividend: {dividend_rate:.4f}")
             else:
