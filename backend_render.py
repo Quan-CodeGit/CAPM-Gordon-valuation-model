@@ -526,12 +526,13 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
         company_name = data.get('description', ticker)
 
         # ── Beta ──────────────────────────────────────────────────────────────
-        # Fallback chain: beta_1_year → beta_5_year → beta_3_year → beta → 1.0
+        # Fallback chain: beta_5_year → beta_3_year → beta_1_year → beta → 1.0
+        # 5-year preferred: smoother, less noise than 1-year for DDM valuation.
         # Use explicit is-not-None checks (not `or`) so 0.0 and negative betas
         # are accepted — both are valid for defensive/inverse-correlated stocks.
         beta = 1.0
         beta_estimated = True
-        for _bf in ('beta_1_year', 'beta_5_year', 'beta_3_year', 'beta'):
+        for _bf in ('beta_5_year', 'beta_3_year', 'beta_1_year', 'beta'):
             _bv = data.get(_bf)
             if _bv is not None:
                 try:
