@@ -1507,12 +1507,29 @@
                                 <div className="card aR4" style={{padding:'16px 22px'}}>
                                     <div className="section-label" style={{marginBottom:'11px'}}>Data Sources</div>
                                     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(195px,1fr))',gap:'5px 16px'}}>
-                                        {Object.entries(result.sources).map(([k,v])=>(
-                                            <div key={k} style={{display:'flex',gap:'6px',fontSize:'0.77rem'}}>
-                                                <span style={{color:'var(--text-dim)',textTransform:'capitalize',whiteSpace:'nowrap'}}>{k.replace(/([A-Z])/g,' $1').trim()}:</span>
-                                                <span style={{color:'var(--text-secondary)'}}>{v}</span>
-                                            </div>
-                                        ))}
+                                        {(() => {
+                                            // Human-readable labels — override the auto camelCase split for
+                                            // growth fields so they're clearly tied to their model context.
+                                            const LABELS = {
+                                                beta:                'Beta',
+                                                riskFreeRate:        'Risk Free Rate',
+                                                marketReturn:        'Market Return',
+                                                currentPrice:        'Current Price',
+                                                dividend:            'Dividend',
+                                                dividendGrowth:      'Gordon g',
+                                                earningsYieldGrowth: 'EY Growth',
+                                            };
+                                            return Object.entries(result.sources)
+                                                .filter(([,v]) => v)
+                                                .map(([k,v]) => (
+                                                    <div key={k} style={{display:'flex',gap:'6px',fontSize:'0.77rem'}}>
+                                                        <span style={{color:'var(--text-dim)',whiteSpace:'nowrap'}}>
+                                                            {LABELS[k] || k.replace(/([A-Z])/g,' $1').trim()}:
+                                                        </span>
+                                                        <span style={{color:'var(--text-secondary)'}}>{v}</span>
+                                                    </div>
+                                                ));
+                                        })()}
                                     </div>
                                     <p style={{fontSize:'0.7rem',color:'var(--text-dim)',marginTop:'9px',fontStyle:'italic'}}>
                                         Powered by TradingView · Yahoo Finance · Damodaran NYU Stern 2026

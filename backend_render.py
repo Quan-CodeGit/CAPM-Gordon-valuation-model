@@ -1152,7 +1152,8 @@ def get_valuation(ticker):
                 'marketReturn': 'Historical Average',
                 'currentPrice': source,
                 'dividend': source,
-                'dividendGrowth': industry_growth_info.get('source', 'Historical dividends') if industry_growth_info else 'Calculated from History'
+                'dividendGrowth':        industry_growth_info.get('source', 'Historical dividends')           if industry_growth_info else 'Calculated from History',
+                'earningsYieldGrowth':   industry_growth_info.get('earnings_yield_g_source', 'Historical dividends') if industry_growth_info else 'Calculated from History',
             }
         }
 
