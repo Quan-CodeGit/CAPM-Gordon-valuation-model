@@ -322,14 +322,17 @@ def _get_regional_benchmark(region, dataset):
 #   effective_benchmark = max(actual_benchmark, gdp_base_pct × 0.5)
 #   (the floor prevents ratio explosion when the benchmark is near-zero)
 #
-# Gordon cap (perpetuity): anchored to GDP — industries grow at most 1.2× GDP forever.
+# Gordon cap (perpetuity): hard ceiling at GDP for all sectors at or above market.
+# Rationale: Gordon DDM is single-stage — g represents today-to-infinity with no
+# explicit high-growth period. All sectors converge to GDP at maturity regardless
+# of current momentum; only structurally lagging sectors earn a sub-GDP cap (0.9×).
 # EY cap (short-term signal): above GDP allowed — captures near-term industry momentum.
 _TIER_TABLE = [
     # (ratio_upper_bound,  tier_name,    gordon_mult, ey_mult)
-    (0.75, 'lagging',      0.9,          1.0),   # industry structurally below market
-    (1.5,  'market',       1.0,          1.5),   # broadly in line with economy
-    (3.0,  'above',        1.1,          2.0),   # clear sustained outperformer
-    (None, 'high_growth',  1.2,          2.0),   # structural advantage / penetration gap
+    (0.75, 'lagging',      0.9,          1.0),   # structurally below market → sub-GDP ceiling
+    (1.5,  'market',       1.0,          1.5),   # broadly in line with economy → GDP ceiling
+    (3.0,  'above',        1.0,          2.0),   # outperformer today → still GDP in perpetuity
+    (None, 'high_growth',  1.0,          2.0),   # fastest today → still GDP in perpetuity
 ]
 
 def _classify_tier(ratio):
