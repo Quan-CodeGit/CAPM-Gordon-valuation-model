@@ -346,6 +346,33 @@
         }
         .acc-btn:hover { color: var(--text-primary); }
 
+        /* ── Sensitivity sliders ───────────────────────── */
+        .sens-slider {
+            -webkit-appearance: none; appearance: none;
+            width: 100%; height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+            background: rgba(255,255,255,0.10);
+        }
+        .sens-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 15px; height: 15px;
+            border-radius: 50%; cursor: pointer;
+            background: var(--purple);
+            box-shadow: 0 0 8px rgba(192,132,252,0.55);
+            transition: box-shadow 0.15s;
+        }
+        .sens-slider::-webkit-slider-thumb:hover { box-shadow: 0 0 14px rgba(192,132,252,0.8); }
+        .sens-slider-r { -webkit-appearance: none; appearance: none;
+            width: 100%; height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+            background: rgba(255,255,255,0.10);
+        }
+        .sens-slider-r::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 15px; height: 15px;
+            border-radius: 50%; cursor: pointer;
+            background: var(--blue);
+            box-shadow: 0 0 8px rgba(94,173,255,0.55);
+            transition: box-shadow 0.15s;
+        }
+        .sens-slider-r::-webkit-slider-thumb:hover { box-shadow: 0 0 14px rgba(94,173,255,0.8); }
+
         /* ── Scrollbar ─────────────────────────────────── */
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -672,26 +699,28 @@
         </div>
     );
 
-    /* ── Sensitivity Heatmap ────────────────────────── */
-    // Two-way: g (rows) × r (columns). Cells show % premium/discount vs current price.
+    /* ── Sensitivity Heatmap (interactive) ─────────── */
+    // Sliders control the centre (g, r). Table always shows ±2% / ±1% around selection.
     const SensitivityHeatmap = ({ dividend, currentPrice, baseG, baseR }) => {
-        const [open, setOpen] = React.useState(false);
+        const [open,    setOpen]    = React.useState(false);
+        const [customG, setCustomG] = React.useState(baseG);
+        const [customR, setCustomR] = React.useState(baseR);
 
-        // g rows: baseG ±2% in 0.5% steps (9 rows, high→low so table reads naturally)
+        const isAtBase = Math.abs(customG - baseG) < 0.00005
+                      && Math.abs(customR - baseR) < 0.00005;
+
+        // g rows high→low so higher growth is at the top (natural reading order)
         const gOffsets = [0.02, 0.015, 0.01, 0.005, 0, -0.005, -0.01, -0.015, -0.02];
-        // r columns: baseR ±1% in 0.5% steps (5 cols — tighter range, r moves less)
         const rOffsets = [-0.01, -0.005, 0, 0.005, 0.01];
 
-        const cellBg = (pct) => {
-            if (pct === null) return 'rgba(255,255,255,0.02)';
-            const intensity = Math.min(Math.abs(pct) / 25, 1); // saturate at ±25%
+        const cellBg = pct => {
+            const i = Math.min(Math.abs(pct) / 25, 1);
             return pct > 0
-                ? `rgba(16,240,122,${0.07 + intensity * 0.22})`
-                : `rgba(255,64,96,${0.07 + intensity * 0.22})`;
+                ? `rgba(16,240,122,${0.07 + i * 0.23})`
+                : `rgba(255,64,96,${0.07 + i * 0.23})`;
         };
-
-        const fmtPct = (pct) =>
-            pct === null ? '—' : (pct > 0 ? '+' : '') + pct.toFixed(1) + '%';
+        const fmtPct  = pct => (pct > 0 ? '+' : '') + pct.toFixed(1) + '%';
+        const fmtRate = v   => (v * 100).toFixed(2) + '%';
 
         return (
             <div className="card" style={{overflow:'hidden'}}>
@@ -703,70 +732,138 @@
                     </span>
                     <IconChev open={open}/>
                 </button>
+
                 {open && (
                     <div style={{padding:'0 22px 20px'}}>
                         <p style={{fontSize:'0.75rem',color:'var(--text-secondary)',margin:'0 0 14px',lineHeight:1.6}}>
-                            % premium <span style={{color:'var(--bull)'}}>▲</span> or discount <span style={{color:'var(--bear)'}}>▼</span> to current price at each (g, r) combination.
-                            Gordon DDM: <span style={{fontFamily:'var(--mono)',color:'rgba(255,255,255,0.7)'}}>Fair Price = D₁ ÷ (r − g)</span>.
-                            <span style={{color:'var(--purple)',marginLeft:'5px'}}>■ base case</span>
-                            <span style={{color:'var(--text-dim)',marginLeft:'8px'}}>— = model breakdown (g ≥ r)</span>
+                            Drag the sliders to explore how fair price changes across (g, r) space.
+                            Each cell = % premium <span style={{color:'var(--bull)'}}>▲</span> or
+                            discount <span style={{color:'var(--bear)'}}>▼</span> to current price.
+                            <span style={{color:'var(--text-dim)',marginLeft:'6px'}}>— = model breakdown (g ≥ r)</span>
                         </p>
+
+                        {/* ── Sliders ── */}
+                        <div style={{background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:'11px',padding:'16px 18px',marginBottom:'16px'}}>
+
+                            {/* g slider */}
+                            <div style={{marginBottom:'16px'}}>
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'8px'}}>
+                                    <span style={{fontSize:'0.75rem',color:'var(--purple)',fontWeight:500}}>
+                                        g &nbsp;—&nbsp; perpetuity growth rate
+                                    </span>
+                                    <span style={{fontFamily:'var(--mono)',fontSize:'0.9rem',color:'var(--purple)',fontWeight:700}}>
+                                        {fmtRate(customG)}
+                                    </span>
+                                </div>
+                                <input type="range" className="sens-slider"
+                                    min={0} max={0.20} step={0.001}
+                                    value={customG}
+                                    onChange={e => setCustomG(parseFloat(e.target.value))}
+                                    style={{width:'100%'}}/>
+                                <div style={{display:'flex',justifyContent:'space-between',fontSize:'0.63rem',color:'var(--text-dim)',marginTop:'4px'}}>
+                                    <span>0%</span><span>20%</span>
+                                </div>
+                            </div>
+
+                            {/* r slider */}
+                            <div style={{marginBottom:'12px'}}>
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'8px'}}>
+                                    <span style={{fontSize:'0.75rem',color:'var(--blue)',fontWeight:500}}>
+                                        r &nbsp;—&nbsp; CAPM required return
+                                    </span>
+                                    <span style={{fontFamily:'var(--mono)',fontSize:'0.9rem',color:'var(--blue)',fontWeight:700}}>
+                                        {fmtRate(customR)}
+                                    </span>
+                                </div>
+                                <input type="range" className="sens-slider-r"
+                                    min={0.01} max={0.25} step={0.001}
+                                    value={customR}
+                                    onChange={e => setCustomR(parseFloat(e.target.value))}
+                                    style={{width:'100%'}}/>
+                                <div style={{display:'flex',justifyContent:'space-between',fontSize:'0.63rem',color:'var(--text-dim)',marginTop:'4px'}}>
+                                    <span>1%</span><span>25%</span>
+                                </div>
+                            </div>
+
+                            {/* Base reference + reset */}
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:'8px',borderTop:'1px solid rgba(255,255,255,0.06)'}}>
+                                <span style={{fontSize:'0.7rem',color:'var(--text-dim)'}}>
+                                    API base &nbsp;·&nbsp;
+                                    <span style={{color:'var(--purple)'}}>g = {fmtRate(baseG)}</span>
+                                    &nbsp;·&nbsp;
+                                    <span style={{color:'var(--blue)'}}>r = {fmtRate(baseR)}</span>
+                                </span>
+                                {!isAtBase && (
+                                    <button
+                                        onClick={() => { setCustomG(baseG); setCustomR(baseR); }}
+                                        style={{background:'none',border:'1px solid rgba(192,132,252,0.3)',borderRadius:'6px',color:'var(--purple)',fontSize:'0.72rem',padding:'3px 12px',cursor:'pointer',fontFamily:'var(--sans)'}}>
+                                        ↺ Reset
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* g ≥ r global warning */}
+                        {customG >= customR && (
+                            <div style={{display:'flex',gap:'8px',background:'rgba(255,196,69,0.07)',border:'1px solid rgba(255,196,69,0.22)',borderRadius:'9px',padding:'9px 13px',marginBottom:'14px'}}>
+                                <span style={{color:'var(--gold)'}}>⚠</span>
+                                <span style={{fontSize:'0.78rem',color:'var(--gold)'}}>
+                                    g ≥ r — Gordon Model breaks down at selected values. Reduce g or increase r.
+                                </span>
+                            </div>
+                        )}
+
+                        {/* ── Heatmap table ── */}
                         <div style={{overflowX:'auto'}}>
                             <table style={{borderCollapse:'separate',borderSpacing:'3px',fontSize:'0.71rem',fontFamily:'var(--mono)',width:'100%'}}>
                                 <thead>
                                     <tr>
-                                        <th style={{padding:'4px 8px',color:'var(--text-dim)',fontWeight:400,textAlign:'left',whiteSpace:'nowrap',fontSize:'0.68rem'}}>
+                                        <th style={{padding:'4px 8px',color:'var(--text-dim)',fontWeight:400,textAlign:'left',whiteSpace:'nowrap',fontSize:'0.67rem'}}>
                                             g ↓ &nbsp; r →
                                         </th>
-                                        {rOffsets.map(dr => (
-                                            <th key={dr} style={{
-                                                padding:'4px 10px',textAlign:'center',fontWeight: dr===0 ? 600 : 400,
-                                                color: dr===0 ? 'var(--blue)' : 'var(--text-dim)',
-                                                whiteSpace:'nowrap'
-                                            }}>
-                                                {dr === 0
-                                                    ? `${(baseR*100).toFixed(2)}%`
-                                                    : (dr > 0 ? '+' : '') + (dr*100).toFixed(1) + '%'}
-                                            </th>
-                                        ))}
+                                        {rOffsets.map(dr => {
+                                            const r = customR + dr;
+                                            return (
+                                                <th key={dr} style={{padding:'4px 10px',textAlign:'center',whiteSpace:'nowrap',
+                                                    fontWeight: dr===0 ? 700 : 400,
+                                                    color: dr===0 ? 'var(--blue)' : 'var(--text-dim)'}}>
+                                                    {fmtRate(r)}
+                                                </th>
+                                            );
+                                        })}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {gOffsets.map(dg => {
-                                        const g = baseG + dg;
-                                        const isBaseRow = dg === 0;
+                                        const g = customG + dg;
+                                        const isCentreRow = dg === 0;
                                         return (
                                             <tr key={dg}>
-                                                <td style={{
-                                                    padding:'4px 8px',whiteSpace:'nowrap',
-                                                    color: isBaseRow ? 'var(--purple)' : 'var(--text-dim)',
-                                                    fontWeight: isBaseRow ? 600 : 400
-                                                }}>
-                                                    {dg === 0
-                                                        ? `${(g*100).toFixed(2)}%`
-                                                        : (dg > 0 ? '+' : '') + (dg*100).toFixed(1) + '%'}
+                                                <td style={{padding:'4px 8px',whiteSpace:'nowrap',
+                                                    color: isCentreRow ? 'var(--purple)' : 'var(--text-dim)',
+                                                    fontWeight: isCentreRow ? 700 : 400}}>
+                                                    {fmtRate(Math.max(g, 0))}
                                                 </td>
                                                 {rOffsets.map(dr => {
-                                                    const r = baseR + dr;
-                                                    const isBase = dg === 0 && dr === 0;
-                                                    if (g >= r) return (
-                                                        <td key={dr} style={{
-                                                            padding:'5px 10px',textAlign:'center',
+                                                    const r     = customR + dr;
+                                                    const isCtr = dg === 0 && dr === 0;
+                                                    if (g >= r || g < 0) return (
+                                                        <td key={dr} style={{padding:'5px 10px',textAlign:'center',
                                                             background:'rgba(255,255,255,0.02)',
-                                                            color:'var(--text-dim)',borderRadius:'5px'
-                                                        }}>—</td>
+                                                            color:'var(--text-dim)',borderRadius:'5px'}}>—</td>
                                                     );
-                                                    const fairPrice = dividend * (1 + g) / (r - g);
-                                                    const pct = (fairPrice - currentPrice) / currentPrice * 100;
+                                                    const fair = dividend * (1 + g) / (r - g);
+                                                    const pct  = (fair - currentPrice) / currentPrice * 100;
                                                     return (
                                                         <td key={dr} style={{
-                                                            padding:'5px 10px',textAlign:'center',
+                                                            padding:'5px 10px', textAlign:'center',
                                                             background: cellBg(pct),
                                                             color: pct > 0 ? 'var(--bull)' : 'var(--bear)',
                                                             borderRadius:'5px',
-                                                            fontWeight: isBase ? 700 : 400,
-                                                            outline: isBase ? '1.5px solid rgba(192,132,252,0.55)' : 'none',
+                                                            fontWeight: isCtr ? 700 : 400,
+                                                            outline: isCtr ? '1.5px solid rgba(192,132,252,0.6)' : 'none',
                                                             outlineOffset: '-1px',
+                                                            transition: 'background 0.15s, color 0.15s',
                                                         }}>
                                                             {fmtPct(pct)}
                                                         </td>
@@ -778,8 +875,9 @@
                                 </tbody>
                             </table>
                         </div>
-                        <p style={{fontSize:'0.68rem',color:'var(--text-dim)',marginTop:'10px',margin:'10px 0 0',fontStyle:'italic'}}>
-                            r = CAPM required return &nbsp;·&nbsp; g = perpetuity dividend growth &nbsp;·&nbsp; D₁ = D₀ × (1 + g)
+
+                        <p style={{fontSize:'0.67rem',color:'var(--text-dim)',marginTop:'10px',fontStyle:'italic'}}>
+                            Centre cell (outlined) = selected (g, r) &nbsp;·&nbsp; Gordon DDM: Fair Price = D₁ ÷ (r − g) &nbsp;·&nbsp; D₁ = D₀ × (1 + g)
                         </p>
                     </div>
                 )}
