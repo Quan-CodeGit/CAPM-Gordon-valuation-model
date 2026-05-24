@@ -701,10 +701,17 @@
 
     /* ── Sensitivity Heatmap (interactive) ─────────── */
     // Sliders control the centre (g, r). Table always shows ±2% / ±1% around selection.
-    const SensitivityHeatmap = ({ dividend, currentPrice, baseG, baseR }) => {
+    //
+    // D0 is derived from gordonReturn rather than result.dividend to avoid rounding loss:
+    //   Gordon return = D1/P0 + g  →  D1 = (gordonReturn − g) × P0  →  D0 = D1 / (1+g)
+    // This guarantees the centre cell matches the API fair price exactly.
+    const SensitivityHeatmap = ({ gordonReturn, currentPrice, baseG, baseR }) => {
         const [open,    setOpen]    = React.useState(false);
         const [customG, setCustomG] = React.useState(baseG);
         const [customR, setCustomR] = React.useState(baseR);
+
+        // Precise D0 — immune to the 2-decimal rounding in result.dividend
+        const impliedD0 = ((gordonReturn - baseG) * currentPrice) / (1 + baseG);
 
         const isAtBase = Math.abs(customG - baseG) < 0.00005
                       && Math.abs(customR - baseR) < 0.00005;
@@ -852,7 +859,7 @@
                                                             background:'rgba(255,255,255,0.02)',
                                                             color:'var(--text-dim)',borderRadius:'5px'}}>—</td>
                                                     );
-                                                    const fair = dividend * (1 + g) / (r - g);
+                                                    const fair = impliedD0 * (1 + g) / (r - g);
                                                     const pct  = (fair - currentPrice) / currentPrice * 100;
                                                     return (
                                                         <td key={dr} style={{
@@ -1699,7 +1706,7 @@
                             {/* ── SENSITIVITY HEATMAP ── */}
                             {hasGordon && (
                                 <SensitivityHeatmap
-                                    dividend={result.dividend}
+                                    gordonReturn={result.gordonReturn}
                                     currentPrice={result.currentPrice}
                                     baseG={result.dividendGrowth}
                                     baseR={result.capmReturn}
