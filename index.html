@@ -699,19 +699,18 @@
         </div>
     );
 
-    /* ── Sensitivity Heatmap (interactive) ─────────── */
-    // Sliders control the centre (g, r). Table always shows ±2% / ±1% around selection.
-    //
-    // D0 is derived from gordonReturn rather than result.dividend to avoid rounding loss:
-    //   Gordon return = D1/P0 + g  →  D1 = (gordonReturn − g) × P0  →  D0 = D1 / (1+g)
-    // This guarantees the centre cell matches the API fair price exactly.
-    const SensitivityHeatmap = ({ gordonReturn, currentPrice, baseG, baseR }) => {
+    /* -- Sensitivity Heatmap (interactive) ----------- */
+    // Sliders control the centre (g, r). Table always shows +/-2% / +/-1% around selection.
+    // D0 is back-calculated from fairPrice to avoid the 2-decimal rounding in result.dividend.
+    const SensitivityHeatmap = ({ fairPrice, currentPrice, baseG, baseR }) => {
         const [open,    setOpen]    = React.useState(false);
         const [customG, setCustomG] = React.useState(baseG);
         const [customR, setCustomR] = React.useState(baseR);
 
-        // Precise D0 — immune to the 2-decimal rounding in result.dividend
-        const impliedD0 = ((gordonReturn - baseG) * currentPrice) / (1 + baseG);
+        // D1 = fairPrice * (r - g), D0 = D1 / (1 + g)
+        const impliedD0 = (baseR > baseG && fairPrice > 0)
+            ? fairPrice * (baseR - baseG) / (1 + baseG)
+            : 0;
 
         const isAtBase = Math.abs(customG - baseG) < 0.00005
                       && Math.abs(customR - baseR) < 0.00005;
@@ -1706,7 +1705,7 @@
                             {/* ── SENSITIVITY HEATMAP ── */}
                             {hasGordon && (
                                 <SensitivityHeatmap
-                                    gordonReturn={result.gordonReturn}
+                                    fairPrice={result.fairPrice}
                                     currentPrice={result.currentPrice}
                                     baseG={result.dividendGrowth}
                                     baseR={result.capmReturn}
