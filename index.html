@@ -600,6 +600,16 @@
 })();
 </script>
 
+<script>
+// Catch any JS errors and show them on-screen for debugging
+window.onerror = function(msg, src, line, col, err) {
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c00;color:#fff;padding:10px 14px;font:13px monospace;z-index:9999;white-space:pre-wrap;';
+    d.textContent = 'JS ERROR (line ' + line + '): ' + msg + (err ? '\n' + err.stack : '');
+    document.body.appendChild(d);
+};
+</script>
+
 <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
