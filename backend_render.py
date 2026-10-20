@@ -464,6 +464,69 @@ def suggest_damodaran_industries(tv_sector, tv_industry, n=5):
     return [name for _, name in scores[:n]]
 
 
+# ── Company statistics (Yahoo/TradingView-style summary) ─────────────────────
+# Field names verified against scanner.tradingview.com for US, HOSE and ASX symbols.
+# Monetary values (cap, EV, revenue, assets, debt, cash flow) arrive in the
+# fundamental currency (USD for every market we support); ratios and %s are
+# currency-neutral; 52-week high/low are in the trading currency like 'close'.
+# Banks typically return None for EBITDA, cash and quick ratio.
+STAT_FIELDS = {
+    # output key            : TradingView field
+    'marketCap':              'market_cap_basic',
+    'enterpriseValue':        'enterprise_value_current',
+    'trailingPE':             'price_earnings_ttm',
+    'forwardPE':              'non_gaap_price_to_earnings_per_share_forecast_next_fy',
+    'pegRatio':               'price_earnings_growth_ttm',
+    'priceToSales':           'price_sales_current',
+    'priceToBook':            'price_book_fq',
+    'evToRevenue':            'enterprise_value_to_revenue_ttm',
+    'evToEbitda':             'enterprise_value_ebitda_ttm',
+    'priceToFcf':             'price_free_cash_flow_ttm',
+    'netMargin':              'net_margin_ttm',              # %
+    'operatingMargin':        'operating_margin_ttm',        # %
+    'roa':                    'return_on_assets_fq',         # %
+    'roe':                    'return_on_equity_fq',         # %
+    'roic':                   'return_on_invested_capital_fq',  # %
+    'revenue':                'total_revenue_ttm',
+    'revenueGrowth':          'total_revenue_yoy_growth_ttm',   # %
+    'netIncome':              'net_income_ttm',
+    'ebitda':                 'ebitda_ttm',
+    'epsGrowth':              'earnings_per_share_diluted_yoy_growth_ttm',  # %
+    'totalAssets':            'total_assets_fq',
+    'totalLiabilities':       'total_liabilities_fq',
+    'totalEquity':            'total_equity_fq',
+    'totalDebt':              'total_debt_fq',
+    'netDebt':                'net_debt_fq',
+    'cash':                   'cash_n_short_term_invest_fq',
+    'debtToEquity':           'debt_to_equity_fq',           # ratio (0.78 = 78%)
+    'currentRatio':           'current_ratio_fq',
+    'quickRatio':             'quick_ratio_fq',
+    'bookValuePerShare':      'book_value_per_share_fq',
+    'operatingCashFlow':      'cash_f_operating_activities_ttm',
+    'freeCashFlow':           'free_cash_flow_ttm',
+    'sharesOutstanding':      'total_shares_outstanding_fundamental',
+    'floatShares':            'float_shares_outstanding',
+    'employees':              'number_of_employees',
+    # dividend_payout_ratio_ttm deliberately omitted: TV reports 0 for VN payers
+    # (e.g. VCB) - the app's own payoutRatio (dividend / EPS) is used instead.
+    'week52High':             'price_52_week_high',
+    'week52Low':              'price_52_week_low',
+}
+
+def _build_statistics(data):
+    """Pick STAT_FIELDS out of a TradingView overview payload; None when nothing usable."""
+    stats = {}
+    for key, field in STAT_FIELDS.items():
+        v = data.get(field)
+        try:
+            stats[key] = float(v) if v is not None else None
+        except (ValueError, TypeError):
+            stats[key] = None
+    if not any(v is not None for v in stats.values()):
+        return None
+    stats['fundamentalCurrency'] = data.get('fundamental_currency_code') or 'USD'
+    return stats
+
 def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
     """Fetch stock data from TradingView"""
     try:
@@ -481,7 +544,11 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
 
         # Request beta_5_year explicitly — the library's default VOLATILITY_FIELDS
         # only includes beta_1_year. We append beta_5_year so it arrives in data.
-        extra_fields = list(Overview.ALL_FIELDS) + ['beta_5_year']
+        # Also request the company-statistics fields and their currency code.
+        extra_fields = list(dict.fromkeys(
+            list(Overview.ALL_FIELDS) + ['beta_5_year', 'fundamental_currency_code']
+            + list(STAT_FIELDS.values())
+        ))
 
         for exchange in exchanges:
             try:
@@ -588,6 +655,7 @@ def get_tradingview_data(ticker, is_vn_stock=False, is_au_stock=False):
             'source': f'TradingView ({exchange}:{ticker})',
             'tvSector': tv_sector,
             'tvIndustry': tv_industry,
+            'statistics': _build_statistics(data),
         }
     except Exception as e:
         print(f"TradingView error for {ticker}: {e}")
@@ -1175,6 +1243,7 @@ def get_valuation(ticker):
             'industrySuggestions': industry_suggestions,
             'tvSector': raw_tv_sector,
             'tvIndustry': raw_tv_industry,
+            'statistics': tv_data.get('statistics') if tv_data else None,
             'growthSource': industry_growth_info.get('source', 'Historical dividends') if industry_growth_info else 'Historical dividends',
             'sources': {
                 'beta': source,

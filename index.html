@@ -901,6 +901,108 @@ window.onerror = function(msg, src, line, col, err) {
         );
     };
 
+    /* -- Company statistics (Yahoo / TradingView style) -- */
+    // Monetary values come from TradingView fundamentals (USD for every market);
+    // 52-week range is in the trading currency, so it uses the page's fmt().
+    const CompanyStatistics = ({ stats, currency, fmt }) => {
+        if (!stats) return null;
+        const fc = stats.fundamentalCurrency || 'USD';
+        const sym = fc === 'USD' ? '$' : '';
+        const suffix = fc === 'USD' ? '' : ' ' + fc;
+
+        const has   = v => v !== null && v !== undefined && isFinite(v);
+        const big   = v => {
+            const a = Math.abs(v), s = v < 0 ? '-' : '';
+            if (a >= 1e12) return s + (a / 1e12).toFixed(2) + 'T';
+            if (a >= 1e9)  return s + (a / 1e9).toFixed(2) + 'B';
+            if (a >= 1e6)  return s + (a / 1e6).toFixed(2) + 'M';
+            if (a >= 1e3)  return s + (a / 1e3).toFixed(2) + 'K';
+            return s + a.toFixed(2);
+        };
+        const money = v => has(v) ? (v < 0 ? '-' : '') + sym + big(Math.abs(v)) + suffix : '—';
+        const count = v => has(v) ? big(v) : '—';
+        const ratio = v => has(v) ? v.toFixed(2) : '—';
+        const pct   = v => has(v) ? v.toFixed(2) + '%' : '—';
+        const int   = v => has(v) ? Math.round(v).toLocaleString('en-US') : '—';
+        const ps    = v => has(v) ? sym + v.toFixed(2) + suffix : '—';
+        const tone  = v => !has(v) ? 'var(--text-dim)' : v < 0 ? 'var(--bear)' : undefined;
+
+        const panels = [
+            { title: 'Valuation measures', rows: [
+                ['Market cap',             money(stats.marketCap)],
+                ['Enterprise value',       money(stats.enterpriseValue)],
+                ['Trailing P/E',           ratio(stats.trailingPE)],
+                ['Forward P/E',            ratio(stats.forwardPE)],
+                ['PEG ratio (ttm)',        ratio(stats.pegRatio)],
+                ['Price/sales',            ratio(stats.priceToSales)],
+                ['Price/book (mrq)',       ratio(stats.priceToBook)],
+                ['EV/revenue (ttm)',       ratio(stats.evToRevenue)],
+                ['EV/EBITDA (ttm)',        ratio(stats.evToEbitda)],
+                ['Price/FCF (ttm)',        ratio(stats.priceToFcf)],
+            ]},
+            { title: 'Profitability & income statement', rows: [
+                ['Profit margin (ttm)',    pct(stats.netMargin),       tone(stats.netMargin)],
+                ['Operating margin (ttm)', pct(stats.operatingMargin), tone(stats.operatingMargin)],
+                ['Return on assets (mrq)', pct(stats.roa),             tone(stats.roa)],
+                ['Return on equity (mrq)', pct(stats.roe),             tone(stats.roe)],
+                ['ROIC (mrq)',             pct(stats.roic),            tone(stats.roic)],
+                ['Revenue (ttm)',          money(stats.revenue)],
+                ['Revenue growth (yoy)',   pct(stats.revenueGrowth),   tone(stats.revenueGrowth)],
+                ['Net income (ttm)',       money(stats.netIncome),     tone(stats.netIncome)],
+                ['EBITDA (ttm)',           money(stats.ebitda)],
+                ['EPS growth (yoy)',       pct(stats.epsGrowth),       tone(stats.epsGrowth)],
+            ]},
+            { title: 'Balance sheet (mrq)', rows: [
+                ['Total assets',           money(stats.totalAssets)],
+                ['Total liabilities',      money(stats.totalLiabilities)],
+                ['Total equity',           money(stats.totalEquity),   tone(stats.totalEquity)],
+                ['Total cash',             money(stats.cash)],
+                ['Total debt',             money(stats.totalDebt)],
+                ['Net debt',               money(stats.netDebt)],
+                ['Total debt/equity',      has(stats.debtToEquity) ? (stats.debtToEquity * 100).toFixed(2) + '%' : '—'],
+                ['Current ratio',          ratio(stats.currentRatio)],
+                ['Quick ratio',            ratio(stats.quickRatio)],
+                ['Book value/share',       ps(stats.bookValuePerShare)],
+            ]},
+            { title: 'Cash flow, shares & trading', rows: [
+                ['Operating cash flow (ttm)', money(stats.operatingCashFlow), tone(stats.operatingCashFlow)],
+                ['Free cash flow (ttm)',   money(stats.freeCashFlow),  tone(stats.freeCashFlow)],
+                ['Shares outstanding',     count(stats.sharesOutstanding)],
+                ['Float',                  count(stats.floatShares)],
+                ['Employees',              int(stats.employees)],
+                ['52-week high',           has(stats.week52High) ? fmt(stats.week52High, currency) : '—'],
+                ['52-week low',            has(stats.week52Low)  ? fmt(stats.week52Low,  currency) : '—'],
+            ]},
+        ];
+
+        return (
+            <div className="card aR3" style={{padding:'20px 22px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:'6px',marginBottom:'14px'}}>
+                    <div className="section-label">Company Statistics</div>
+                    <span style={{fontSize:'0.7rem',color:'var(--text-dim)'}}>
+                        TradingView · monetary values in {fc}
+                    </span>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:'14px'}}>
+                    {panels.map(p => (
+                        <div key={p.title} style={{background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:'11px',padding:'14px 16px'}}>
+                            <div style={{fontSize:'0.75rem',color:'var(--text-secondary)',fontWeight:600,marginBottom:'8px'}}>{p.title}</div>
+                            {p.rows.map(([k, v, c]) => (
+                                <div key={k} className="data-row">
+                                    <span className="data-key">{k}</span>
+                                    <span className="data-val" style={c ? {color:c} : undefined}>{v}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ))}
+                </div>
+                <p style={{fontSize:'0.67rem',color:'var(--text-dim)',marginTop:'10px',fontStyle:'italic',marginBottom:0}}>
+                    ttm = trailing twelve months · mrq = most recent quarter · — = not reported (banks typically omit EBITDA, cash and quick ratio)
+                </p>
+            </div>
+        );
+    };
+
     /* ── Main component ─────────────────────────────── */
     function CAPMGordonCalculator() {
         const [ticker, setTicker] = useState('');
@@ -1779,6 +1881,9 @@ window.onerror = function(msg, src, line, col, err) {
                                     )}
                                 </div>
                             )}
+
+                            {/* ── COMPANY STATISTICS ── */}
+                            <CompanyStatistics stats={result.statistics} currency={result.currency} fmt={fmt}/>
 
                             {/* ── INTERPRETATION ── */}
                             <div className="card aL4" style={{padding:'20px 22px'}}>
