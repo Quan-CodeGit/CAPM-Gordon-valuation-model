@@ -125,6 +125,29 @@ def get_usd_vnd_rate():
         pass
     return 25500  # Fallback rate
 
+def get_fx_usd_to(currency):
+    """Units of `currency` per 1 USD from TradingView (cached 1h); None if unavailable.
+
+    Used to convert TV fundamentals (USD) into the trading currency for WACC.
+    Deliberately no hardcoded fallback - the frontend shows a placeholder instead.
+    """
+    if currency == 'USD':
+        return 1.0
+    cache_key = f"FX_USD{currency}_{int(time.time() / 3600)}"
+    if cache_key in _cache:
+        return _cache[cache_key]
+    try:
+        from tradingview_scraper.symbols.overview import Overview
+        result = Overview().get_symbol_overview(symbol=f'FX_IDC:USD{currency}', fields=['close'])
+        rate = (result or {}).get('data', {}).get('close')
+        if rate:
+            _cache[cache_key] = float(rate)
+            print(f"[FX] USD/{currency} rate: {rate}")
+            return float(rate)
+    except Exception as e:
+        print(f"[FX] USD/{currency} unavailable: {e}")
+    return None
+
 def map_tv_to_damodaran(sector, industry, company_name=None):
     """Map TradingView sector/industry strings to the nearest Damodaran industry name.
     Uses case-insensitive substring matching; most-specific checks come first.
@@ -511,6 +534,12 @@ STAT_FIELDS = {
     # (e.g. VCB) - the app's own payoutRatio (dividend / EPS) is used instead.
     'week52High':             'price_52_week_high',
     'week52Low':              'price_52_week_low',
+    # WACC inputs. TV has no interest-expense / income-tax / pre-tax-income fields;
+    # the frontend derives them: interest = EBIT / coverage,
+    # pre-tax income = pre-tax margin x revenue, tax = pre-tax income - net income.
+    'ebit':                   'ebit_ttm',
+    'interestCoverage':       'interst_cover_ttm',           # sic - TV's spelling
+    'preTaxMargin':           'pre_tax_margin_ttm',          # %
 }
 
 def _build_statistics(data):
@@ -1244,6 +1273,7 @@ def get_valuation(ticker):
             'tvSector': raw_tv_sector,
             'tvIndustry': raw_tv_industry,
             'statistics': tv_data.get('statistics') if tv_data else None,
+            'fxUsdToLocal': get_fx_usd_to(currency) if tv_data and tv_data.get('statistics') else None,
             'growthSource': industry_growth_info.get('source', 'Historical dividends') if industry_growth_info else 'Historical dividends',
             'sources': {
                 'beta': source,

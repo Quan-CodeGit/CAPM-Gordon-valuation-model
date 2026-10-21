@@ -347,6 +347,22 @@
         .acc-btn:hover { color: var(--text-primary); }
 
         /* ── Sensitivity sliders ───────────────────────── */
+        /* WACC calculator inputs */
+        .wacc-in, .wacc-sel {
+            width: 100%; box-sizing: border-box;
+            background: rgba(255,255,255,0.04); color: var(--text-primary);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 7px;
+            padding: 6px 9px; font-family: var(--mono); font-size: 0.8rem; outline: none;
+        }
+        .wacc-in:focus, .wacc-sel:focus { border-color: rgba(192,132,252,0.6); }
+        .wacc-in.missing { border-color: rgba(255,196,69,0.55); background: rgba(255,196,69,0.06); }
+        .wacc-sel option { background: #0d1220; color: #f0f4ff; }
+        .wacc-tag { font-size: 0.62rem; padding: 1px 6px; border-radius: 8px; font-family: var(--sans); white-space: nowrap; }
+        .wacc-tag.derived { color: var(--blue);   background: rgba(94,173,255,0.10);  border: 1px solid rgba(94,173,255,0.28); }
+        .wacc-tag.user    { color: var(--purple); background: rgba(192,132,252,0.10); border: 1px solid rgba(192,132,252,0.28); }
+        .wacc-tag.missing { color: var(--gold);   background: rgba(255,196,69,0.10);  border: 1px solid rgba(255,196,69,0.32); }
+        .wacc-tag.model   { color: var(--bull);   background: rgba(16,240,122,0.08);  border: 1px solid rgba(16,240,122,0.25); }
+
         .sens-slider {
             -webkit-appearance: none; appearance: none;
             width: 100%; height: 4px; border-radius: 2px; outline: none; cursor: pointer;
@@ -999,6 +1015,472 @@ window.onerror = function(msg, src, line, col, err) {
                 <p style={{fontSize:'0.67rem',color:'var(--text-dim)',marginTop:'10px',fontStyle:'italic',marginBottom:0}}>
                     ttm = trailing twelve months · mrq = most recent quarter · — = not reported (banks typically omit EBITDA, cash and quick ratio)
                 </p>
+            </div>
+        );
+    };
+
+    /* -- WACC calculator ---------------------------------------------- */
+    /* WACC-CORE-START  (pure functions - unit-tested outside the page) */
+    // Damodaran synthetic ratings, large non-financial firms, spreads as of Jan 2026.
+    // 'from' = lower bound of interest coverage; spread in %. Editable in the UI.
+    const WACC_RATING_TABLE = [
+        { from: -100000, rating: 'D2/D',     spread: 19.00 },
+        { from: 0.20,    rating: 'C2/C',     spread: 16.00 },
+        { from: 0.65,    rating: 'Ca2/CC',   spread: 12.61 },
+        { from: 0.80,    rating: 'Caa/CCC',  spread: 8.85 },
+        { from: 1.25,    rating: 'B3/B-',    spread: 5.09 },
+        { from: 1.50,    rating: 'B2/B',     spread: 3.21 },
+        { from: 1.75,    rating: 'B1/B+',    spread: 2.75 },
+        { from: 2.00,    rating: 'Ba2/BB',   spread: 1.84 },
+        { from: 2.25,    rating: 'Ba1/BB+',  spread: 1.38 },
+        { from: 2.50,    rating: 'Baa2/BBB', spread: 1.11 },
+        { from: 3.00,    rating: 'A3/A-',    spread: 0.89 },
+        { from: 4.25,    rating: 'A2/A',     spread: 0.78 },
+        { from: 5.50,    rating: 'A1/A+',    spread: 0.70 },
+        { from: 6.50,    rating: 'Aa2/AA',   spread: 0.55 },
+        { from: 8.50,    rating: 'Aaa/AAA',  spread: 0.40 },
+    ];
+
+    const waccOk = x => typeof x === 'number' && Number.isFinite(x);
+
+    // Excel PV(rate, n, -coupon, -face): value of all debt treated as one coupon bond.
+    const waccPV = (rate, n, coupon, face) => rate === 0
+        ? coupon * n + face
+        : coupon * (1 - Math.pow(1 + rate, -n)) / rate + face / Math.pow(1 + rate, n);
+
+    // Approximate match on the lower bound (Excel VLOOKUP TRUE): last row with from <= coverage.
+    const waccLookupRating = (coverage, table) => {
+        if (!waccOk(coverage)) return null;
+        let hit = null;
+        table.filter(r => waccOk(r.from) && waccOk(r.spread) && r.rating)
+             .slice().sort((a, b) => a.from - b.from)
+             .forEach(r => { if (coverage >= r.from) hit = r; });
+        return hit;
+    };
+
+    // Face-value-weighted average maturity = SUM(face_i * years_i) / SUM(face_i)
+    const waccAvgMaturity = rows => {
+        const ok = rows.filter(r => waccOk(r.face) && waccOk(r.years) && r.face > 0 && r.years >= 0);
+        const sf = ok.reduce((s, r) => s + r.face, 0);
+        return sf > 0 ? { n: ok.reduce((s, r) => s + r.face * r.years, 0) / sf, sumFace: sf } : null;
+    };
+
+    // WACC = kd(1 - t)(D/V) + ke(E/V); D = market value of debt at the current kd.
+    const waccCompute = ({ E, face, coupon, n, kd, ke, t }) => {
+        if (![E, face, coupon, n, kd, ke, t].every(waccOk)) return null;
+        const D = waccPV(kd, n, coupon, face);
+        const V = D + E;
+        const kdAfter = kd * (1 - t);
+        return { D, V, wd: D / V, we: E / V, kdAfter, wacc: kdAfter * (D / V) + ke * (E / V) };
+    };
+    /* WACC-CORE-END */
+
+    const WACC_KD_METHODS = {
+        auto: 'Auto: first available in priority a, b, c, d',
+        a:    'a. Yield on traded long-term bonds (YTM)',
+        b:    "b. Actual S&P / Moody's rating: rf + spread",
+        c:    'c. Synthetic rating from interest coverage: rf + spread',
+        d:    'd. Rate on most recent bank loan / bond issue',
+    };
+
+    const WaccCalculator = ({ result }) => {
+        const st    = result.statistics || {};
+        const fx    = waccOk(result.fxUsdToLocal) ? result.fxUsdToLocal : null;   // local units per 1 USD
+        const cur   = result.currency;
+        const scale = cur === 'VND' ? 1e9 : 1e6;                                  // money inputs in bn VND / m USD,AUD
+        const unit  = cur === 'VND' ? 'VND bn' : cur + ' m';
+
+        const num   = s => (s === '' || s === null || s === undefined) ? null : (Number.isFinite(Number(s)) ? Number(s) : null);
+        const str   = (x, d) => waccOk(x) ? String(+x.toFixed(d)) : '';
+        const toU   = usd => (waccOk(usd) && fx !== null) ? usd * fx / scale : null;   // USD -> local units
+
+        // ---- derived pre-fills (every one is shown, labelled and editable) ----
+        const dFace   = toU(st.totalDebt);
+        const dEbit   = toU(st.ebit);
+        const dInt    = (waccOk(st.ebit) && waccOk(st.interestCoverage) && st.interestCoverage > 0) ? toU(st.ebit / st.interestCoverage) : null;
+        const dPretax = (waccOk(st.preTaxMargin) && waccOk(st.revenue)) ? toU(st.preTaxMargin / 100 * st.revenue) : null;
+        const dTax    = (dPretax !== null && toU(st.netIncome) !== null) ? dPretax - toU(st.netIncome) : null;
+        const dShares = waccOk(st.sharesOutstanding) ? st.sharesOutstanding / 1e6 : null;  // millions
+
+        const init = React.useMemo(() => ({
+            price: str(result.currentPrice, 4), shares: str(dShares, 4),
+            rf: str(result.riskFreeRate * 100, 4), beta: str(result.beta, 4), rm: str(result.marketReturn * 100, 4),
+            face: str(dFace, 3), coupon: str(dInt, 3), ebit: str(dEbit, 3),
+            pretax: str(dPretax, 3), tax: str(dTax, 3),
+            bondYield: '', rating: '', recentRate: '',
+        }), []);
+        const SOURCE = { price: 'model', rf: 'model', beta: 'model', rm: 'model' };
+
+        const [open, setOpen]         = React.useState(false);
+        const [v, setV]               = React.useState(init);
+        const [keMethod, setKeMethod] = React.useState('capm');
+        const [kdMethod, setKdMethod] = React.useState('auto');
+        const [mat, setMat]           = React.useState([{ face: '', years: '' }]);
+        const [table, setTable]       = React.useState(WACC_RATING_TABLE.map(r => ({ from: String(r.from), rating: r.rating, spread: String(r.spread) })));
+        const [showTable, setShowTable] = React.useState(false);
+        const set = k => e => { const val = e.target.value; setV(s => ({ ...s, [k]: val })); };
+
+        // ---- parse ----
+        const x = {};
+        Object.keys(v).forEach(k => { x[k] = k === 'rating' ? v[k] : num(v[k]); });
+        const rf = x.rf !== null ? x.rf / 100 : null;
+        const rm = x.rm !== null ? x.rm / 100 : null;
+        const tableNum = table.map(r => ({ from: num(r.from), rating: r.rating.trim(), spread: num(r.spread) }));
+        const validTable = tableNum.filter(r => waccOk(r.from) && waccOk(r.spread) && r.rating);
+
+        // ---- E ----
+        const E = (x.price !== null && x.shares !== null) ? x.price * x.shares * 1e6 / scale : null;
+
+        // ---- ke ----
+        const keCapm    = (rf !== null && x.beta !== null && rm !== null) ? rf + x.beta * (rm - rf) : null;
+        const hasGordon = result.dividend > 0 && waccOk(result.gordonReturn);
+        const keGordon  = hasGordon ? result.gordonReturn : null;
+        const ke        = keMethod === 'gordon' ? keGordon : keCapm;
+
+        // ---- kd candidates ----
+        const coverage  = (x.ebit !== null && x.coupon !== null && x.coupon > 0) ? x.ebit / x.coupon : null;
+        const synth     = waccLookupRating(coverage, validTable);
+        const ratingRow = validTable.find(r => r.rating === v.rating) || null;
+        const cand = {
+            a: x.bondYield !== null ? { kd: x.bondYield / 100 } : null,
+            b: (ratingRow && rf !== null) ? { kd: rf + ratingRow.spread / 100, row: ratingRow } : null,
+            c: (synth && rf !== null) ? { kd: rf + synth.spread / 100, row: synth } : null,
+            d: x.recentRate !== null ? { kd: x.recentRate / 100 } : null,
+        };
+        const kdKey = kdMethod === 'auto' ? (['a', 'b', 'c', 'd'].find(k => cand[k]) || null) : kdMethod;
+        const kd    = kdKey && cand[kdKey] ? cand[kdKey].kd : null;
+
+        // ---- n, t, WACC ----
+        const matRes = waccAvgMaturity(mat.map(r => ({ face: num(r.face), years: num(r.years) })));
+        const n      = matRes ? matRes.n : null;
+        const t      = (x.tax !== null && x.pretax !== null && x.pretax > 0) ? x.tax / x.pretax : null;
+        const out    = waccCompute({ E, face: x.face, coupon: x.coupon, n, kd, ke, t });
+
+        // ---- formatting ----
+        const MISS = <span style={{color:'var(--gold)',fontWeight:600}}>[missing]</span>;
+        const pc   = (y, d = 2) => waccOk(y) ? (y * 100).toFixed(d) + '%' : MISS;
+        const mu   = y => waccOk(y) ? y.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' ' + unit : MISS;
+        const nm   = (y, d = 2) => waccOk(y) ? y.toLocaleString('en-US', { maximumFractionDigits: d }) : MISS;
+
+        const tag = key => {
+            if (v[key] === '') return <span className="wacc-tag missing">MISSING: enter value</span>;
+            if (v[key] === init[key]) return SOURCE[key] === 'model'
+                ? <span className="wacc-tag model">from model</span>
+                : <span className="wacc-tag derived">derived</span>;
+            return <span className="wacc-tag user">your input</span>;
+        };
+        // Plain function (not a component) so inputs keep focus while typing.
+        const field = (key, label, unitLabel, hint) => (
+            <div key={key} style={{marginBottom:'11px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'6px',marginBottom:'4px'}}>
+                    <span style={{fontSize:'0.74rem',color:'var(--text-secondary)'}}>{label} <span style={{color:'var(--text-dim)'}}>({unitLabel})</span></span>
+                    {tag(key)}
+                </div>
+                <input type="number" className={'wacc-in' + (v[key] === '' ? ' missing' : '')}
+                    value={v[key]} onChange={set(key)} placeholder="missing: enter value"/>
+                {hint && <div style={{fontSize:'0.64rem',color:'var(--text-dim)',marginTop:'3px',fontFamily:'var(--mono)',lineHeight:1.5}}>{hint}</div>}
+            </div>
+        );
+        const panel = (title, children) => (
+            <div style={{background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:'11px',padding:'14px 16px'}}>
+                <div style={{fontSize:'0.75rem',color:'var(--text-secondary)',fontWeight:600,marginBottom:'10px'}}>{title}</div>
+                {children}
+            </div>
+        );
+        const sub = { fontSize:'0.64rem', color:'var(--text-dim)', fontFamily:'var(--mono)', lineHeight:1.5 };
+        const fxTxt = cur === 'USD' ? '' : (fx !== null ? ` x USD/${cur} ${nm(fx, 4)}` : ` x USD/${cur} [FX unavailable]`);
+        const usdTxt = y => waccOk(y) ? '$' + (y / 1e6).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'm' : '[n/a]';
+
+        // ---- sensitivity: rows = beta, cols = kd; D re-priced at each kd ----
+        const betaSteps = [-0.2, -0.1, 0, 0.1, 0.2];
+        const kdSteps   = [-0.01, -0.005, 0, 0.005, 0.01];
+        const sensCell  = (db, dk) => {
+            const keX = keMethod === 'capm'
+                ? (rf !== null && x.beta !== null && rm !== null ? rf + (x.beta + db) * (rm - rf) : null)
+                : ke;
+            const kdX = kd !== null ? kd + dk : null;
+            const r = waccCompute({ E, face: x.face, coupon: x.coupon, n, kd: kdX, ke: keX, t });
+            return r ? r.wacc : null;
+        };
+
+        const isFinancial = /financ|bank/i.test((result.tvSector || '') + ' ' + (result.tvIndustry || ''));
+
+        // ---- audit chain ----
+        const chain = [
+            ['E', 'Price x shares outstanding', <>{nm(x.price, 4)} x {nm(x.shares, 4)}m / {scale === 1e9 ? '1e9' : '1e6'}</>, mu(E)],
+            ['n', 'SUM(face x years) / SUM(face)', matRes ? <>{nm(matRes.n * matRes.sumFace, 3)} / {nm(matRes.sumFace, 3)}</> : <>maturity table {MISS}</>, waccOk(n) ? n.toFixed(3) + ' yrs' : MISS],
+            ['Coverage', 'EBIT / interest expense', <>{nm(x.ebit, 3)} / {nm(x.coupon, 3)}</>, waccOk(coverage) ? <>{coverage.toFixed(2)}x, {synth ? `${synth.rating} (+${synth.spread.toFixed(2)}%)` : 'no table row'}</> : MISS],
+            ['kd', kdKey ? WACC_KD_METHODS[kdKey] : 'no method has data yet',
+                kdKey === 'a' ? <>bond YTM input</> :
+                kdKey === 'b' && cand.b ? <>{pc(rf)} + {cand.b.row.spread.toFixed(2)}% ({cand.b.row.rating})</> :
+                kdKey === 'c' && cand.c ? <>{pc(rf)} + {cand.c.row.spread.toFixed(2)}% ({cand.c.row.rating})</> :
+                kdKey === 'd' ? <>latest loan / issue rate input</> : MISS,
+                pc(kd, 3)],
+            ['D', 'C x [1 - (1+kd)^-n] / kd + F / (1+kd)^n',
+                <>{nm(x.coupon, 3)} x [1 - (1+{waccOk(kd) ? kd.toFixed(4) : '?'})^-{waccOk(n) ? n.toFixed(3) : '?'}] / {waccOk(kd) ? kd.toFixed(4) : '?'} + {nm(x.face, 3)} / (1+{waccOk(kd) ? kd.toFixed(4) : '?'})^{waccOk(n) ? n.toFixed(3) : '?'}</>,
+                out ? mu(out.D) : MISS],
+            ['V', 'D + E', <>{out ? mu(out.D) : MISS} + {mu(E)}</>, out ? mu(out.V) : MISS],
+            ['D/V, E/V', 'D / V, E / V', '', out ? <>{pc(out.wd)}, {pc(out.we)}</> : MISS],
+            ['ke', keMethod === 'gordon' ? 'Gordon: D1 / P0 + g' : 'CAPM: rf + beta x (E[Rm] - rf)',
+                keMethod === 'gordon'
+                    ? (hasGordon ? <>{nm(result.dividendD1, 4)} / {nm(result.currentPrice, 4)} + {pc(result.dividendGrowth)} (model value)</> : <>no dividend: Gordon unavailable</>)
+                    : <>{pc(rf)} + {nm(x.beta, 4)} x ({pc(rm)} - {pc(rf)})</>,
+                pc(ke, 3)],
+            ['t', 'Income tax / pre-tax income', <>{nm(x.tax, 3)} / {nm(x.pretax, 3)}</>, pc(t)],
+            ['kd(1-t)', 'kd x (1 - t)', <>{pc(kd, 3)} x (1 - {pc(t)})</>, out ? pc(out.kdAfter, 3) : MISS],
+            ['WACC', 'kd(1-t) x D/V + ke x E/V',
+                out ? <>{pc(out.kdAfter, 3)} x {pc(out.wd)} + {pc(ke, 3)} x {pc(out.we)} = {pc(out.kdAfter * out.wd, 3)} + {pc(ke * out.we, 3)}</> : MISS,
+                out ? pc(out.wacc, 3) : MISS],
+        ];
+
+        const missingList = [
+            E === null && 'share price / shares outstanding',
+            n === null && 'debt maturity table (face value + years to maturity per tranche)',
+            kd === null && (kdMethod === 'auto' ? 'cost of debt: no method a-d has data' : `cost of debt for method ${kdMethod}`),
+            x.face === null && 'face value of debt',
+            x.coupon === null && 'interest expense (coupon)',
+            ke === null && 'cost of equity',
+            t === null && 'income tax and pre-tax income (> 0)',
+        ].filter(Boolean);
+
+        return (
+            <div className="card" style={{overflow:'hidden'}}>
+                <button className="acc-btn" onClick={() => setOpen(o => !o)}>
+                    <span style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap'}}>
+                        <IconInfo/>
+                        WACC Calculator
+                        <span style={{fontFamily:'var(--mono)',fontSize:'0.78rem',color: out ? 'var(--purple)' : 'var(--gold)'}}>
+                            {out ? (out.wacc * 100).toFixed(2) + '%' : 'inputs missing'}
+                        </span>
+                    </span>
+                    <IconChev open={open}/>
+                </button>
+
+                {open && (
+                <div style={{padding:'0 22px 20px'}}>
+                    <p style={{fontSize:'0.75rem',color:'var(--text-secondary)',margin:'0 0 14px',lineHeight:1.6}}>
+                        WACC = kd(1 - t)(D/V) + ke(E/V), using <b>market</b> values of debt and equity.
+                        Tags show where each input came from: <span className="wacc-tag model">from model</span> <span className="wacc-tag derived">derived</span> <span className="wacc-tag user">your input</span> <span className="wacc-tag missing">MISSING</span>.
+                        Monetary inputs are in {unit}.
+                    </p>
+
+                    {isFinancial && (
+                        <div className="warn-box" style={{marginBottom:'14px'}}>
+                            <div style={{color:'var(--gold)',flexShrink:0}}><IconWarn/></div>
+                            <p style={{color:'var(--gold)',fontSize:'0.8rem',margin:0}}>This looks like a financial firm. The synthetic rating table is for non-financial firms, and for banks debt is operating capital, so WACC is generally not meaningful.</p>
+                        </div>
+                    )}
+
+                    {/* ── Inputs ── */}
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:'14px',marginBottom:'16px'}}>
+                        {panel('Equity: E = P x shares', <>
+                            {field('price',  'Share price', cur)}
+                            {field('shares', 'Shares outstanding', 'millions', 'TradingView total shares outstanding')}
+                        </>)}
+
+                        {panel('Cost of equity: ke', <>
+                            <select className="wacc-sel" value={keMethod} onChange={e => setKeMethod(e.target.value)} style={{marginBottom:'11px'}}>
+                                <option value="capm">CAPM: ke = rf + beta x (E[Rm] - rf)</option>
+                                <option value="gordon" disabled={!hasGordon}>Gordon: ke = D1/P0 + g{hasGordon ? '' : ' (no dividend)'}</option>
+                            </select>
+                            {field('rf',   'Risk-free rate rf', '%', 'Also used for kd = rf + spread')}
+                            {field('beta', 'Beta', 'x')}
+                            {field('rm',   'Expected market return E[Rm]', '%')}
+                            {keMethod === 'gordon' && <div style={sub}>Gordon ke = {pc(keGordon, 3)} from the model (D1 = {nm(result.dividendD1, 4)}, g = {pc(result.dividendGrowth)})</div>}
+                        </>)}
+
+                        {panel('Debt as one coupon bond', <>
+                            {field('face',   'Face value = book debt', unit, `= TV total debt (mrq) ${usdTxt(st.totalDebt)}${fxTxt}`)}
+                            {field('coupon', 'Coupon = total interest expense', unit + ' / yr',
+                                waccOk(st.interestCoverage) ? `= EBIT / TV interest coverage ${st.interestCoverage.toFixed(2)}x. Overwrite with annual-report interest expense if available.` : 'TradingView has no interest coverage for this stock: enter interest expense from the annual report.')}
+                            <div style={{fontSize:'0.74rem',color:'var(--text-secondary)',margin:'4px 0 6px',display:'flex',justifyContent:'space-between'}}>
+                                <span>Maturity table (annual report)</span>
+                                {n === null ? <span className="wacc-tag missing">MISSING: enter tranches</span> : <span className="wacc-tag user">n = {n.toFixed(3)} yrs</span>}
+                            </div>
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 26px',gap:'6px',fontSize:'0.64rem',color:'var(--text-dim)',marginBottom:'4px'}}>
+                                <span>Face ({unit})</span><span>Years to maturity</span><span/>
+                            </div>
+                            {mat.map((r, i) => (
+                                <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 26px',gap:'6px',marginBottom:'6px'}}>
+                                    <input type="number" className={'wacc-in' + (r.face === '' ? ' missing' : '')} value={r.face} placeholder="face"
+                                        onChange={e => { const val = e.target.value; setMat(m => m.map((q, j) => j === i ? { ...q, face: val } : q)); }}/>
+                                    <input type="number" className={'wacc-in' + (r.years === '' ? ' missing' : '')} value={r.years} placeholder="years"
+                                        onChange={e => { const val = e.target.value; setMat(m => m.map((q, j) => j === i ? { ...q, years: val } : q)); }}/>
+                                    <button onClick={() => setMat(m => m.length > 1 ? m.filter((_, j) => j !== i) : [{ face: '', years: '' }])}
+                                        title="Remove row" style={{background:'none',border:'1px solid rgba(255,255,255,0.12)',borderRadius:'6px',color:'var(--text-dim)',cursor:'pointer'}}>x</button>
+                                </div>
+                            ))}
+                            <button onClick={() => setMat(m => [...m, { face: '', years: '' }])}
+                                style={{background:'none',border:'1px dashed rgba(192,132,252,0.35)',borderRadius:'6px',color:'var(--purple)',fontSize:'0.72rem',padding:'4px 10px',cursor:'pointer',width:'100%'}}>
+                                + add tranche
+                            </button>
+                            {matRes && waccOk(x.face) && Math.abs(matRes.sumFace - x.face) > 0.005 * Math.max(x.face, 1) && (
+                                <div style={{...sub,color:'var(--gold)',marginTop:'6px'}}>Tranches sum to {nm(matRes.sumFace, 3)} vs face {nm(x.face, 3)} {unit}. n uses the tranche weights; D uses the face value above.</div>
+                            )}
+                        </>)}
+
+                        {panel('Cost of debt: kd (pre-tax)', <>
+                            <select className="wacc-sel" value={kdMethod} onChange={e => setKdMethod(e.target.value)} style={{marginBottom:'6px'}}>
+                                {Object.entries(WACC_KD_METHODS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                            </select>
+                            <div style={{...sub,marginBottom:'11px'}}>
+                                Using: {kdKey ? WACC_KD_METHODS[kdKey] : 'none'}: {pc(kd, 3)}
+                                {kdMethod !== 'auto' && kd === null && <span style={{color:'var(--gold)'}}> (this method has no data yet)</span>}
+                            </div>
+                            {field('bondYield', 'a. Bond yield to maturity', '%', 'YTM overstates the expected return on risky debt.')}
+                            <div style={{marginBottom:'11px'}}>
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'4px'}}>
+                                    <span style={{fontSize:'0.74rem',color:'var(--text-secondary)'}}>b. Actual S&P / Moody's rating</span>
+                                    {v.rating === '' ? <span className="wacc-tag missing">not set</span> : <span className="wacc-tag user">your input</span>}
+                                </div>
+                                <select className="wacc-sel" value={v.rating} onChange={set('rating')}>
+                                    <option value="">(unrated / unknown)</option>
+                                    {validTable.slice().reverse().map(r => <option key={r.rating} value={r.rating}>{r.rating} (+{r.spread.toFixed(2)}%)</option>)}
+                                </select>
+                            </div>
+                            {field('ebit', 'c. EBIT (for interest coverage)', unit + ' / yr', `= TV EBIT (ttm) ${usdTxt(st.ebit)}${fxTxt}`)}
+                            <div style={{...sub,marginTop:'-6px',marginBottom:'11px'}}>
+                                Coverage = EBIT / interest = {waccOk(coverage) ? coverage.toFixed(2) + 'x' : MISS}{synth ? `, synthetic rating ${synth.rating}, spread ${synth.spread.toFixed(2)}%` : ''}
+                            </div>
+                            {field('recentRate', 'd. Most recent loan / bond rate', '%')}
+                        </>)}
+
+                        {panel('Tax rate: t = income tax / pre-tax income', <>
+                            {field('pretax', 'Pre-tax income', unit + ' / yr',
+                                waccOk(st.preTaxMargin) ? `= TV pre-tax margin ${st.preTaxMargin.toFixed(2)}% x revenue (ttm) ${usdTxt(st.revenue)}${fxTxt}` : 'Not available from TradingView: enter from the annual report.')}
+                            {field('tax', 'Income tax expense', unit + ' / yr', '= pre-tax income - net income (ttm). Overstated if net income is after minority interests: check the annual report.')}
+                            <div style={sub}>t = {pc(t)}</div>
+                            <div style={{...sub,marginTop:'8px',color:'var(--text-secondary)'}}>
+                                Note: your course defines t two ways (effective company rate vs the marginal rate of an unlevered firm). Per your instruction this uses the effective rate.
+                            </div>
+                        </>)}
+                    </div>
+
+                    {/* ── Rating table (editable) ── */}
+                    <div style={{marginBottom:'16px'}}>
+                        <button onClick={() => setShowTable(s => !s)}
+                            style={{background:'none',border:'none',color:'var(--blue)',fontSize:'0.75rem',cursor:'pointer',padding:0}}>
+                            {showTable ? '▾' : '▸'} Synthetic rating table (Damodaran, large non-financial firms, Jan 2026): editable
+                        </button>
+                        {showTable && (
+                            <div style={{overflowX:'auto',marginTop:'8px'}}>
+                                <table style={{borderCollapse:'separate',borderSpacing:'3px',fontSize:'0.72rem',fontFamily:'var(--mono)'}}>
+                                    <thead><tr style={{color:'var(--text-dim)'}}><th style={{textAlign:'left'}}>Coverage from</th><th style={{textAlign:'left'}}>Rating</th><th style={{textAlign:'left'}}>Spread %</th></tr></thead>
+                                    <tbody>
+                                        {table.map((r, i) => (
+                                            <tr key={i} style={synth && tableNum[i].rating === synth.rating && tableNum[i].from === synth.from ? {outline:'1.5px solid rgba(192,132,252,0.6)'} : undefined}>
+                                                {['from', 'rating', 'spread'].map(k => (
+                                                    <td key={k}><input className="wacc-in" style={{minWidth:'90px'}} value={r[k]}
+                                                        onChange={e => { const val = e.target.value; setTable(tb => tb.map((q, j) => j === i ? { ...q, [k]: val } : q)); }}/></td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                <button onClick={() => setTable(WACC_RATING_TABLE.map(r => ({ from: String(r.from), rating: r.rating, spread: String(r.spread) })))}
+                                    style={{marginTop:'6px',background:'none',border:'1px solid rgba(94,173,255,0.3)',borderRadius:'6px',color:'var(--blue)',fontSize:'0.7rem',padding:'3px 10px',cursor:'pointer'}}>
+                                    Reset to Jan 2026 table
+                                </button>
+                                <div style={{...sub,marginTop:'4px'}}>Lookup: approximate match on the lower bound (the last row whose "coverage from" is &lt;= the firm's coverage).</div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ── Outputs ── */}
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'10px',marginBottom:'16px'}}>
+                        {[
+                            ['E (market)', mu(E)], ['D (market)', out ? mu(out.D) : MISS], ['V = D + E', out ? mu(out.V) : MISS],
+                            ['D / V', out ? pc(out.wd) : MISS], ['E / V', out ? pc(out.we) : MISS],
+                            ['ke', pc(ke, 3)], ['kd (pre-tax)', pc(kd, 3)], ['kd (1 - t)', out ? pc(out.kdAfter, 3) : MISS], ['t', pc(t)],
+                        ].map(([k, val]) => (
+                            <div key={k} style={{background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:'9px',padding:'9px 12px'}}>
+                                <div style={{fontSize:'0.66rem',color:'var(--text-dim)'}}>{k}</div>
+                                <div style={{fontFamily:'var(--mono)',fontSize:'0.86rem',color:'var(--text-primary)'}}>{val}</div>
+                            </div>
+                        ))}
+                        <div style={{background:'rgba(192,132,252,0.08)',border:'1px solid rgba(192,132,252,0.35)',borderRadius:'9px',padding:'9px 12px'}}>
+                            <div style={{fontSize:'0.66rem',color:'var(--purple)'}}>WACC</div>
+                            <div style={{fontFamily:'var(--mono)',fontSize:'1.05rem',fontWeight:700,color:'var(--purple)'}}>{out ? pc(out.wacc, 3) : MISS}</div>
+                        </div>
+                    </div>
+
+                    {missingList.length > 0 && (
+                        <div className="warn-box" style={{marginBottom:'16px'}}>
+                            <div style={{color:'var(--gold)',flexShrink:0}}><IconWarn/></div>
+                            <div style={{color:'var(--gold)',fontSize:'0.78rem'}}>
+                                WACC needs: {missingList.join('; ')}. No value is invented for missing inputs.
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Formula chain ── */}
+                    <div style={{fontSize:'0.75rem',color:'var(--text-secondary)',fontWeight:600,marginBottom:'8px'}}>Formula chain (audit)</div>
+                    <div style={{overflowX:'auto',marginBottom:'16px'}}>
+                        <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.7rem',fontFamily:'var(--mono)'}}>
+                            <tbody>
+                                {chain.map(([k, f, sub2, res]) => (
+                                    <tr key={k} style={{borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+                                        <td style={{padding:'5px 8px',color:'var(--purple)',whiteSpace:'nowrap',verticalAlign:'top'}}>{k}</td>
+                                        <td style={{padding:'5px 8px',color:'var(--text-secondary)',verticalAlign:'top'}}>{f}{sub2 !== '' && <div style={{color:'var(--text-dim)',marginTop:'2px'}}>= {sub2}</div>}</td>
+                                        <td style={{padding:'5px 8px',color:'var(--text-primary)',textAlign:'right',whiteSpace:'nowrap',verticalAlign:'top'}}>{res}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* ── Sensitivity: beta x kd ── */}
+                    <div style={{fontSize:'0.75rem',color:'var(--text-secondary)',fontWeight:600,marginBottom:'4px'}}>Sensitivity: WACC vs beta (rows) and kd (columns)</div>
+                    <div style={{...sub,marginBottom:'8px'}}>
+                        D is re-priced at each kd.{keMethod === 'gordon' ? ' ke comes from Gordon, so beta has no effect and the rows are identical.' : ''}
+                    </div>
+                    {out ? (
+                        <div style={{overflowX:'auto',marginBottom:'16px'}}>
+                            <table style={{borderCollapse:'separate',borderSpacing:'3px',fontSize:'0.71rem',fontFamily:'var(--mono)',width:'100%'}}>
+                                <thead>
+                                    <tr>
+                                        <th style={{padding:'4px 8px',color:'var(--text-dim)',fontWeight:400,textAlign:'left'}}>beta \ kd</th>
+                                        {kdSteps.map(dk => <th key={dk} style={{padding:'4px 8px',color: dk === 0 ? 'var(--blue)' : 'var(--text-dim)',fontWeight: dk === 0 ? 700 : 400}}>{((kd + dk) * 100).toFixed(2)}%</th>)}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {betaSteps.map(db => (
+                                        <tr key={db}>
+                                            <td style={{padding:'4px 8px',color: db === 0 ? 'var(--purple)' : 'var(--text-dim)',fontWeight: db === 0 ? 700 : 400}}>{x.beta !== null ? (x.beta + db).toFixed(2) : '—'}</td>
+                                            {kdSteps.map(dk => {
+                                                const w = sensCell(db, dk);
+                                                const ctr = db === 0 && dk === 0;
+                                                return (
+                                                    <td key={dk} style={{padding:'5px 8px',textAlign:'center',borderRadius:'5px',
+                                                        background: w === null ? 'rgba(255,255,255,0.02)' : `rgba(192,132,252,${0.05 + Math.min(Math.abs(w - out.wacc) / 0.02, 1) * 0.2})`,
+                                                        color: 'var(--text-primary)', fontWeight: ctr ? 700 : 400,
+                                                        outline: ctr ? '1.5px solid rgba(192,132,252,0.6)' : 'none', outlineOffset:'-1px'}}>
+                                                        {w === null ? '—' : (w * 100).toFixed(2) + '%'}
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : <div style={{...sub,color:'var(--gold)',marginBottom:'16px'}}>Fill in the missing inputs to see the sensitivity table.</div>}
+
+                    {/* ── Assumptions ── */}
+                    <div style={{fontSize:'0.75rem',color:'var(--text-secondary)',fontWeight:600,marginBottom:'6px'}}>Assumptions used</div>
+                    <ul style={{margin:0,paddingLeft:'18px',fontSize:'0.7rem',color:'var(--text-secondary)',lineHeight:1.7}}>
+                        <li>D and E are market values: E = price x shares; all debt is treated as one coupon bond (face = book debt, coupon = total interest expense, n = face-weighted average maturity) discounted at the current pre-tax kd.</li>
+                        <li>Book debt = TradingView total debt (most recent quarter); EBIT, revenue, pre-tax margin and net income are trailing twelve months, so balance-sheet and income figures cover slightly different dates.</li>
+                        <li>TradingView reports fundamentals in USD{cur === 'USD' ? '.' : <>; converted at USD/{cur} {fx !== null ? nm(fx, 4) : '[unavailable]'} (TradingView FX_IDC spot).</>}</li>
+                        <li>Interest expense is not published by TradingView; pre-filled as EBIT / interest coverage. Replace it with the annual-report figure when available.</li>
+                        <li>t = effective tax rate = income tax / pre-tax income (your choice). Pre-tax income = pre-tax margin x revenue; income tax = pre-tax income - net income, which overstates tax when net income is after minority interests.</li>
+                        <li>kd priority: a. bond YTM (overstates expected return on risky debt), b. actual rating, c. synthetic rating, d. latest loan rate. For b and c, kd = rf + default spread with no country spread added; rf is the model's local 10-year government bond yield.</li>
+                        <li>Rating table: Damodaran large non-financial firms, Jan 2026, approximate match on the lower bound. Financial firms need different cut-offs.</li>
+                        <li>ke: {keMethod === 'gordon' ? 'Gordon D1/P0 + g from the valuation model.' : 'CAPM with rf, beta and E[Rm] from the valuation model (editable above).'}</li>
+                        <li>Sensitivity: beta steps of 0.1 and kd steps of 0.5%; D is re-priced at each kd.</li>
+                    </ul>
+                </div>
+                )}
             </div>
         );
     };
@@ -1884,6 +2366,9 @@ window.onerror = function(msg, src, line, col, err) {
 
                             {/* ── COMPANY STATISTICS ── */}
                             <CompanyStatistics stats={result.statistics} currency={result.currency} fmt={fmt}/>
+
+                            {/* ── WACC CALCULATOR ── */}
+                            <WaccCalculator key={result.ticker + '_' + result.currency} result={result}/>
 
                             {/* ── INTERPRETATION ── */}
                             <div className="card aL4" style={{padding:'20px 22px'}}>
