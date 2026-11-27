@@ -148,6 +148,70 @@ def get_fx_usd_to(currency):
         print(f"[FX] USD/{currency} unavailable: {e}")
     return None
 
+# Emerging-market corporate default spreads by rating bucket, used by the WACC
+# synthetic rating for VN stocks: ICE BofA EM Corporate Plus Index OAS (%), from FRED.
+FRED_EM_SPREAD_SERIES = {
+    'AAA-A':     'BAMLEM1BRRAAA2ACRPIOAS',
+    'BBB':       'BAMLEM2BRRBBBCRPIOAS',
+    'BB':        'BAMLEM3BRRBBCRPIOAS',
+    'B & lower': 'BAMLEM4BRRBLCRPIOAS',
+}
+
+def _fred_latest(series_id):
+    """(date, value) of the latest observation of a FRED series, or None.
+
+    Uses the official FRED API when FRED_API_KEY is set (free key from
+    fredaccount.stlouisfed.org). Without a key it tries the public CSV endpoint,
+    which FRED's bot protection often stalls for Python clients - hence the
+    short timeout.
+    """
+    import requests
+    key = os.environ.get('FRED_API_KEY', '').strip()
+    if key:
+        r = requests.get('https://api.stlouisfed.org/fred/series/observations',
+                         params={'series_id': series_id, 'api_key': key, 'file_type': 'json',
+                                 'sort_order': 'desc', 'limit': 10}, timeout=10)
+        r.raise_for_status()
+        obs = [(o['date'], float(o['value'])) for o in r.json().get('observations', [])
+               if str(o.get('value', '')).strip() not in ('', '.')]
+        return obs[0] if obs else None           # sorted newest first
+    r = requests.get('https://fred.stlouisfed.org/graph/fredgraph.csv', params={'id': series_id},
+                     headers={'User-Agent': 'Mozilla/5.0'}, timeout=6)
+    r.raise_for_status()
+    rows = [line.split(',') for line in r.text.strip().splitlines()[1:]]
+    vals = [(d, float(v)) for d, v in rows if v.strip() not in ('', '.')]
+    return vals[-1] if vals else None             # sorted oldest first
+
+def get_em_spreads():
+    """Latest ICE BofA EM corporate OAS per rating bucket from FRED.
+
+    Returns {bucket: {'spread': float %, 'date': 'YYYY-MM-DD', 'series': id} or None}.
+    A bucket is None when FRED is unreachable - no hardcoded fallback; the
+    frontend shows that spread as missing. A complete set is cached for 24h;
+    a failed attempt for 1h so VN requests don't keep waiting on timeouts.
+    """
+    ok_key   = f"EM_SPREADS_{int(time.time() / 86400)}"
+    fail_key = f"EM_SPREADS_FAIL_{int(time.time() / 3600)}"
+    if ok_key in _cache:
+        return _cache[ok_key]
+    if fail_key in _cache:
+        return _cache[fail_key]
+    out = {}
+    for bucket, sid in FRED_EM_SPREAD_SERIES.items():
+        try:
+            latest = _fred_latest(sid)
+            out[bucket] = {'spread': latest[1], 'date': latest[0], 'series': sid} if latest else None
+        except Exception as e:
+            print(f"[FRED] {sid} unavailable: {e}")
+            out[bucket] = None
+            if not os.environ.get('FRED_API_KEY'):
+                # Keyless CSV is blocked as a whole, not per series - don't wait on the rest.
+                out.update({b: None for b in FRED_EM_SPREAD_SERIES if b not in out})
+                break
+    _cache[ok_key if all(out.values()) else fail_key] = out
+    print(f"[FRED] EM spreads: { {k: (v['spread'] if v else None) for k, v in out.items()} }")
+    return out
+
 def map_tv_to_damodaran(sector, industry, company_name=None):
     """Map TradingView sector/industry strings to the nearest Damodaran industry name.
     Uses case-insensitive substring matching; most-specific checks come first.
@@ -1274,6 +1338,8 @@ def get_valuation(ticker):
             'tvIndustry': raw_tv_industry,
             'statistics': tv_data.get('statistics') if tv_data else None,
             'fxUsdToLocal': get_fx_usd_to(currency) if tv_data and tv_data.get('statistics') else None,
+            # WACC kd spreads: VN = emerging market (ICE EM OAS, live); US/AU use Damodaran (frontend)
+            'emSpreads': get_em_spreads() if is_vn_stock else None,
             'growthSource': industry_growth_info.get('source', 'Historical dividends') if industry_growth_info else 'Historical dividends',
             'sources': {
                 'beta': source,

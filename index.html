@@ -1049,14 +1049,32 @@ window.onerror = function(msg, src, line, col, err) {
         : coupon * (1 - Math.pow(1 + rate, -n)) / rate + face / Math.pow(1 + rate, n);
 
     // Approximate match on the lower bound (Excel VLOOKUP TRUE): last row with from <= coverage.
+    // Rows with a missing spread still define their band, so the returned row's
+    // spread can be null - the caller must then treat kd as missing.
     const waccLookupRating = (coverage, table) => {
         if (!waccOk(coverage)) return null;
         let hit = null;
-        table.filter(r => waccOk(r.from) && waccOk(r.spread) && r.rating)
+        table.filter(r => waccOk(r.from) && r.rating)
              .slice().sort((a, b) => a.from - b.from)
              .forEach(r => { if (coverage >= r.from) hit = r; });
         return hit;
     };
+
+    // Emerging markets (VN): spreads come straight from the ICE BofA EM Corporate Plus
+    // OAS bucket for each notch (live from FRED via the backend). CCC and below have no
+    // EM bucket of their own, so they keep Damodaran's spreads.
+    const WACC_EM_BUCKET = {
+        'Aaa/AAA': 'AAA-A', 'Aa2/AA': 'AAA-A', 'A1/A+': 'AAA-A', 'A2/A': 'AAA-A', 'A3/A-': 'AAA-A',
+        'Baa2/BBB': 'BBB',
+        'Ba1/BB+': 'BB', 'Ba2/BB': 'BB',
+        'B1/B+': 'B & lower', 'B2/B': 'B & lower', 'B3/B-': 'B & lower',
+    };
+    const waccEmTable = (base, em) => base.map(r => {
+        const b = WACC_EM_BUCKET[r.rating];
+        if (!b) return { ...r, bucket: null };
+        const s = em && em[b] && waccOk(em[b].spread) ? em[b].spread : null;
+        return { ...r, spread: s, bucket: b };
+    });
 
     // Face-value-weighted average maturity = SUM(face_i * years_i) / SUM(face_i)
     const waccAvgMaturity = rows => {
@@ -1130,7 +1148,18 @@ window.onerror = function(msg, src, line, col, err) {
         const [keMethod, setKeMethod] = React.useState('capm');
         const [kdMethod, setKdMethod] = React.useState('c');   // interest coverage is the house default
         const [mat, setMat]           = React.useState([{ face: '', years: '' }]);
-        const [table, setTable]       = React.useState(WACC_RATING_TABLE.map(r => ({ from: String(r.from), rating: r.rating, spread: String(r.spread) })));
+        // Spread table by market: VN = emerging market (ICE EM OAS, live from FRED);
+        // US and AU/NZ = Damodaran Jan 2026 (RBA A/BBB spreads cross-check within ~0.2pt).
+        const isEM      = cur === 'VND';
+        const em        = result.emSpreads || null;
+        const baseTable = isEM ? waccEmTable(WACC_RATING_TABLE, em) : WACC_RATING_TABLE;
+        const emDates   = isEM && em ? [...new Set(Object.values(em).filter(Boolean).map(b => b.date))].join(', ') : '';
+        const emDown    = isEM && (!em || Object.values(em).some(b => !b));
+        const tableLabel = isEM
+            ? `Emerging markets: ICE BofA EM Corporate Plus OAS by rating (FRED${emDates ? ', as of ' + emDates : ''}); CCC and below: Damodaran Jan 2026`
+            : 'Damodaran, large non-financial firms, Jan 2026 (US and AU/NZ)';
+        const tableStrings = () => baseTable.map(r => ({ from: String(r.from), rating: r.rating, spread: waccOk(r.spread) ? String(r.spread) : '' }));
+        const [table, setTable]       = React.useState(tableStrings);
         const [showTable, setShowTable] = React.useState(false);
         const set = k => e => { const val = e.target.value; setV(s => ({ ...s, [k]: val })); };
 
@@ -1140,7 +1169,8 @@ window.onerror = function(msg, src, line, col, err) {
         const rf = x.rf !== null ? x.rf / 100 : null;
         const rm = x.rm !== null ? x.rm / 100 : null;
         const tableNum = table.map(r => ({ from: num(r.from), rating: r.rating.trim(), spread: num(r.spread) }));
-        const validTable = tableNum.filter(r => waccOk(r.from) && waccOk(r.spread) && r.rating);
+        const bandTable  = tableNum.filter(r => waccOk(r.from) && r.rating);          // defines coverage bands
+        const validTable = bandTable.filter(r => waccOk(r.spread));                   // rows with a usable spread
 
         // ---- E ----
         const E = eq.E;
@@ -1153,12 +1183,13 @@ window.onerror = function(msg, src, line, col, err) {
 
         // ---- kd candidates ----
         const coverage  = (x.ebit !== null && x.coupon !== null && x.coupon > 0) ? x.ebit / x.coupon : null;
-        const synth     = waccLookupRating(coverage, validTable);
+        const synth     = waccLookupRating(coverage, bandTable);
+        const synthSpreadTxt = synth ? (waccOk(synth.spread) ? `${synth.spread.toFixed(2)}%` : 'spread missing') : '';
         const ratingRow = validTable.find(r => r.rating === v.rating) || null;
         const cand = {
             a: x.bondYield !== null ? { kd: x.bondYield / 100 } : null,
             b: (ratingRow && rf !== null) ? { kd: rf + ratingRow.spread / 100, row: ratingRow } : null,
-            c: (synth && rf !== null) ? { kd: rf + synth.spread / 100, row: synth } : null,
+            c: (synth && waccOk(synth.spread) && rf !== null) ? { kd: rf + synth.spread / 100, row: synth } : null,
             d: x.recentRate !== null ? { kd: x.recentRate / 100 } : null,
         };
         const kdKey = kdMethod === 'auto' ? (['a', 'b', 'c', 'd'].find(k => cand[k]) || null) : kdMethod;
@@ -1227,7 +1258,7 @@ window.onerror = function(msg, src, line, col, err) {
                     : <>{usdTxt(st.marketCap)}{fxTxt}; check: price x shares = {mu(eq.calc)}{waccOk(eq.diff) ? ` (diff ${(eq.diff * 100).toFixed(2)}%)` : ' (check unavailable)'}</>,
                 mu(E)],
             ['n', 'SUM(face x years) / SUM(face)', matRes ? <>{nm(matRes.n * matRes.sumFace, 3)} / {nm(matRes.sumFace, 3)}</> : <>maturity table {MISS}</>, waccOk(n) ? n.toFixed(3) + ' yrs' : MISS],
-            ['Coverage', 'EBIT / interest expense', <>{nm(x.ebit, 3)} / {nm(x.coupon, 3)}</>, waccOk(coverage) ? <>{coverage.toFixed(2)}x, {synth ? `${synth.rating} (+${synth.spread.toFixed(2)}%)` : 'no table row'}</> : MISS],
+            ['Coverage', 'EBIT / interest expense', <>{nm(x.ebit, 3)} / {nm(x.coupon, 3)}</>, waccOk(coverage) ? <>{coverage.toFixed(2)}x, {synth ? `${synth.rating} (+${synthSpreadTxt})` : 'no table row'}</> : MISS],
             ['kd', kdKey ? WACC_KD_METHODS[kdKey] : 'no method has data yet',
                 kdKey === 'a' ? <>bond YTM input</> :
                 kdKey === 'b' && cand.b ? <>{pc(rf)} + {cand.b.row.spread.toFixed(2)}% ({cand.b.row.rating})</> :
@@ -1254,7 +1285,9 @@ window.onerror = function(msg, src, line, col, err) {
         const missingList = [
             E === null && 'market value of equity (no TradingView market cap and no price x shares)',
             n === null && 'debt maturity table (face value + years to maturity per tranche)',
-            kd === null && (kdMethod === 'auto' ? 'cost of debt: no method a-d has data' : `cost of debt for method ${kdMethod}`),
+            kd === null && (kdKey === 'c' && synth && !waccOk(synth.spread)
+                ? `spread for ${synth.rating}${synth.bucket ? ` (ICE EM ${synth.bucket}, FRED unavailable)` : ''}`
+                : kdMethod === 'auto' ? 'cost of debt: no method a-d has data' : `cost of debt for method ${kdMethod}`),
             x.face === null && 'face value of debt',
             x.coupon === null && 'interest expense (coupon)',
             ke === null && 'cost of equity',
@@ -1363,7 +1396,8 @@ window.onerror = function(msg, src, line, col, err) {
                             </div>
                             {field('ebit', 'EBIT (for interest coverage)', unit + ' / yr', `= TV EBIT (ttm) ${usdTxt(st.ebit)}${fxTxt}`)}
                             <div style={{...sub,marginTop:'-6px',marginBottom:'11px'}}>
-                                Coverage = EBIT / interest = {waccOk(coverage) ? coverage.toFixed(2) + 'x' : MISS}{synth ? `, synthetic rating ${synth.rating}, spread ${synth.spread.toFixed(2)}%` : ''}
+                                Coverage = EBIT / interest = {waccOk(coverage) ? coverage.toFixed(2) + 'x' : MISS}{synth ? `, synthetic rating ${synth.rating}, spread ${synthSpreadTxt}` : ''}
+                                {synth && synth.bucket ? ` (ICE EM ${synth.bucket})` : ''}
                             </div>
                             {/* Override methods: inputs shown only when that method is selected */}
                             {(kdMethod === 'a' || kdMethod === 'auto') && field('bondYield', 'a. Bond yield to maturity', '%', 'YTM overstates the expected return on risky debt.')}
@@ -1395,26 +1429,35 @@ window.onerror = function(msg, src, line, col, err) {
                     <div style={{marginBottom:'16px'}}>
                         <button onClick={() => setShowTable(s => !s)}
                             style={{background:'none',border:'none',color:'var(--blue)',fontSize:'0.75rem',cursor:'pointer',padding:0}}>
-                            {showTable ? '▾' : '▸'} Synthetic rating table (Damodaran, large non-financial firms, Jan 2026): editable
+                            {showTable ? '▾' : '▸'} Synthetic rating table ({tableLabel}): editable
                         </button>
+                        {emDown && (
+                            <div style={{...sub,color:'var(--gold)',marginTop:'6px'}}>
+                                Live EM spreads from FRED are unavailable for some buckets; those ratings show a blank spread and kd stays missing if the firm lands there. Fix: set a free FRED API key as FRED_API_KEY on the server, or type the spread into the table below.
+                            </div>
+                        )}
                         {showTable && (
                             <div style={{overflowX:'auto',marginTop:'8px'}}>
                                 <table style={{borderCollapse:'separate',borderSpacing:'3px',fontSize:'0.72rem',fontFamily:'var(--mono)'}}>
-                                    <thead><tr style={{color:'var(--text-dim)'}}><th style={{textAlign:'left'}}>Coverage from</th><th style={{textAlign:'left'}}>Rating</th><th style={{textAlign:'left'}}>Spread %</th></tr></thead>
+                                    <thead><tr style={{color:'var(--text-dim)'}}><th style={{textAlign:'left'}}>Coverage from</th><th style={{textAlign:'left'}}>Rating</th><th style={{textAlign:'left'}}>Spread %</th>{isEM && <th style={{textAlign:'left'}}>Spread source</th>}</tr></thead>
                                     <tbody>
                                         {table.map((r, i) => (
                                             <tr key={i} style={synth && tableNum[i].rating === synth.rating && tableNum[i].from === synth.from ? {outline:'1.5px solid rgba(192,132,252,0.6)'} : undefined}>
                                                 {['from', 'rating', 'spread'].map(k => (
-                                                    <td key={k}><input className="wacc-in" style={{minWidth:'90px'}} value={r[k]}
+                                                    <td key={k}><input className={'wacc-in' + (r[k] === '' ? ' missing' : '')} style={{minWidth:'90px'}} value={r[k]}
+                                                        placeholder={k === 'spread' ? 'missing' : ''}
                                                         onChange={e => { const val = e.target.value; setTable(tb => tb.map((q, j) => j === i ? { ...q, [k]: val } : q)); }}/></td>
                                                 ))}
+                                                {isEM && <td style={{color:'var(--text-dim)',whiteSpace:'nowrap',paddingLeft:'6px'}}>
+                                                    {baseTable[i] && baseTable[i].bucket ? `ICE EM ${baseTable[i].bucket}` : 'Damodaran'}
+                                                </td>}
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
-                                <button onClick={() => setTable(WACC_RATING_TABLE.map(r => ({ from: String(r.from), rating: r.rating, spread: String(r.spread) })))}
+                                <button onClick={() => setTable(tableStrings())}
                                     style={{marginTop:'6px',background:'none',border:'1px solid rgba(94,173,255,0.3)',borderRadius:'6px',color:'var(--blue)',fontSize:'0.7rem',padding:'3px 10px',cursor:'pointer'}}>
-                                    Reset to Jan 2026 table
+                                    Reset to source table
                                 </button>
                                 <div style={{...sub,marginTop:'4px'}}>Lookup: approximate match on the lower bound (the last row whose "coverage from" is &lt;= the firm's coverage).</div>
                             </div>
@@ -1511,7 +1554,11 @@ window.onerror = function(msg, src, line, col, err) {
                         <li>Interest expense is not published by TradingView; pre-filled as EBIT / interest coverage. Replace it with the annual-report figure when available.</li>
                         <li>t = effective tax rate = income tax / pre-tax income (your choice). Pre-tax income = pre-tax margin x revenue; income tax = pre-tax income - net income, which overstates tax when net income is after minority interests.</li>
                         <li>kd default: c. synthetic rating from interest coverage, for consistency across firms. a. bond YTM (overstates expected return on risky debt), b. actual rating and d. latest loan rate are optional overrides. For b and c, kd = rf + default spread with no country spread added; rf is the model's local 10-year government bond yield.</li>
-                        <li>Rating table: Damodaran large non-financial firms, Jan 2026, approximate match on the lower bound. Financial firms need different cut-offs.</li>
+                        <li>Rating table: coverage cut-offs from Damodaran (large non-financial firms, Jan 2026), approximate match on the lower bound; financial firms need different cut-offs.
+                            {isEM
+                                ? ` Spreads (emerging market): ICE BofA EM Corporate Plus OAS by rating bucket, live from FRED${emDates ? ' as of ' + emDates : ''}: AAA to A- use AAA-A, BBB uses BBB, BB+/BB use BB, B+ to B- use B & lower; CCC and below keep Damodaran's spreads. These are USD spreads over US Treasuries, added to the local rf.`
+                                : ' Spreads: Damodaran Jan 2026, used for both US and AU/NZ (RBA A and BBB corporate spreads were within about 0.2 points of it in Oct 2026, and both sovereigns are top-rated).'}
+                        </li>
                         <li>ke: {keMethod === 'gordon' ? 'Gordon D1/P0 + g from the valuation model.' : 'CAPM with rf, beta and E[Rm] from the valuation model (editable above).'}</li>
                         <li>Sensitivity: beta steps of 0.1 and kd steps of 0.5%; D is re-priced at each kd.</li>
                     </ul>
