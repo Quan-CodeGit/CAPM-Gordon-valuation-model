@@ -1065,6 +1065,18 @@ window.onerror = function(msg, src, line, col, err) {
         return sf > 0 ? { n: ok.reduce((s, r) => s + r.face * r.years, 0) / sf, sumFace: sf } : null;
     };
 
+    // E = TradingView market cap, cross-checked against price x shares. If the two
+    // differ by more than WACC_MCAP_TOL (relative to price x shares), use price x shares.
+    const WACC_MCAP_TOL = 0.10;
+    const waccPickEquity = (tvCap, price, shares) => {
+        const calc = (waccOk(price) && waccOk(shares) && price > 0 && shares > 0) ? price * shares : null;
+        const tv   = (waccOk(tvCap) && tvCap > 0) ? tvCap : null;
+        const diff = (tv !== null && calc !== null) ? Math.abs(tv - calc) / calc : null;
+        if (tv !== null && (diff === null || diff <= WACC_MCAP_TOL)) return { E: tv,   source: 'tv',   tv, calc, diff };
+        if (calc !== null)                                           return { E: calc, source: 'calc', tv, calc, diff };
+        return { E: null, source: null, tv, calc, diff };
+    };
+
     // WACC = kd(1 - t)(D/V) + ke(E/V); D = market value of debt at the current kd.
     const waccCompute = ({ E, face, coupon, n, kd, ke, t }) => {
         if (![E, face, coupon, n, kd, ke, t].every(waccOk)) return null;
@@ -1075,12 +1087,13 @@ window.onerror = function(msg, src, line, col, err) {
     };
     /* WACC-CORE-END */
 
+    // Interest coverage (c) is the default for consistency across firms; the others are overrides.
     const WACC_KD_METHODS = {
-        auto: 'Auto: first available in priority a, b, c, d',
+        c:    'c. Synthetic rating from interest coverage: rf + spread (default)',
         a:    'a. Yield on traded long-term bonds (YTM)',
         b:    "b. Actual S&P / Moody's rating: rf + spread",
-        c:    'c. Synthetic rating from interest coverage: rf + spread',
         d:    'd. Rate on most recent bank loan / bond issue',
+        auto: 'Auto: first available in priority a, b, c, d',
     };
 
     const WaccCalculator = ({ result }) => {
@@ -1100,21 +1113,22 @@ window.onerror = function(msg, src, line, col, err) {
         const dInt    = (waccOk(st.ebit) && waccOk(st.interestCoverage) && st.interestCoverage > 0) ? toU(st.ebit / st.interestCoverage) : null;
         const dPretax = (waccOk(st.preTaxMargin) && waccOk(st.revenue)) ? toU(st.preTaxMargin / 100 * st.revenue) : null;
         const dTax    = (dPretax !== null && toU(st.netIncome) !== null) ? dPretax - toU(st.netIncome) : null;
-        const dShares = waccOk(st.sharesOutstanding) ? st.sharesOutstanding / 1e6 : null;  // millions
+        // E: TradingView market cap (USD -> local units), checked against price x shares
+        const eq = waccPickEquity(toU(st.marketCap), result.currentPrice,
+                                  waccOk(st.sharesOutstanding) ? st.sharesOutstanding / scale : null);
 
         const init = React.useMemo(() => ({
-            price: str(result.currentPrice, 4), shares: str(dShares, 4),
             rf: str(result.riskFreeRate * 100, 4), beta: str(result.beta, 4), rm: str(result.marketReturn * 100, 4),
             face: str(dFace, 3), coupon: str(dInt, 3), ebit: str(dEbit, 3),
             pretax: str(dPretax, 3), tax: str(dTax, 3),
             bondYield: '', rating: '', recentRate: '',
         }), []);
-        const SOURCE = { price: 'model', rf: 'model', beta: 'model', rm: 'model' };
+        const SOURCE = { rf: 'model', beta: 'model', rm: 'model' };
 
         const [open, setOpen]         = React.useState(false);
         const [v, setV]               = React.useState(init);
         const [keMethod, setKeMethod] = React.useState('capm');
-        const [kdMethod, setKdMethod] = React.useState('auto');
+        const [kdMethod, setKdMethod] = React.useState('c');   // interest coverage is the house default
         const [mat, setMat]           = React.useState([{ face: '', years: '' }]);
         const [table, setTable]       = React.useState(WACC_RATING_TABLE.map(r => ({ from: String(r.from), rating: r.rating, spread: String(r.spread) })));
         const [showTable, setShowTable] = React.useState(false);
@@ -1129,7 +1143,7 @@ window.onerror = function(msg, src, line, col, err) {
         const validTable = tableNum.filter(r => waccOk(r.from) && waccOk(r.spread) && r.rating);
 
         // ---- E ----
-        const E = (x.price !== null && x.shares !== null) ? x.price * x.shares * 1e6 / scale : null;
+        const E = eq.E;
 
         // ---- ke ----
         const keCapm    = (rf !== null && x.beta !== null && rm !== null) ? rf + x.beta * (rm - rf) : null;
@@ -1207,7 +1221,11 @@ window.onerror = function(msg, src, line, col, err) {
 
         // ---- audit chain ----
         const chain = [
-            ['E', 'Price x shares outstanding', <>{nm(x.price, 4)} x {nm(x.shares, 4)}m / {scale === 1e9 ? '1e9' : '1e6'}</>, mu(E)],
+            ['E', eq.source === 'calc' ? 'Price x shares outstanding (TV market cap rejected)' : 'TradingView market cap',
+                eq.source === 'calc'
+                    ? <>{nm(result.currentPrice, 4)} x {nm(st.sharesOutstanding / 1e6, 2)}m shares</>
+                    : <>{usdTxt(st.marketCap)}{fxTxt}; check: price x shares = {mu(eq.calc)}{waccOk(eq.diff) ? ` (diff ${(eq.diff * 100).toFixed(2)}%)` : ' (check unavailable)'}</>,
+                mu(E)],
             ['n', 'SUM(face x years) / SUM(face)', matRes ? <>{nm(matRes.n * matRes.sumFace, 3)} / {nm(matRes.sumFace, 3)}</> : <>maturity table {MISS}</>, waccOk(n) ? n.toFixed(3) + ' yrs' : MISS],
             ['Coverage', 'EBIT / interest expense', <>{nm(x.ebit, 3)} / {nm(x.coupon, 3)}</>, waccOk(coverage) ? <>{coverage.toFixed(2)}x, {synth ? `${synth.rating} (+${synth.spread.toFixed(2)}%)` : 'no table row'}</> : MISS],
             ['kd', kdKey ? WACC_KD_METHODS[kdKey] : 'no method has data yet',
@@ -1234,7 +1252,7 @@ window.onerror = function(msg, src, line, col, err) {
         ];
 
         const missingList = [
-            E === null && 'share price / shares outstanding',
+            E === null && 'market value of equity (no TradingView market cap and no price x shares)',
             n === null && 'debt maturity table (face value + years to maturity per tranche)',
             kd === null && (kdMethod === 'auto' ? 'cost of debt: no method a-d has data' : `cost of debt for method ${kdMethod}`),
             x.face === null && 'face value of debt',
@@ -1273,9 +1291,25 @@ window.onerror = function(msg, src, line, col, err) {
 
                     {/* ── Inputs ── */}
                     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:'14px',marginBottom:'16px'}}>
-                        {panel('Equity: E = P x shares', <>
-                            {field('price',  'Share price', cur)}
-                            {field('shares', 'Shares outstanding', 'millions', 'TradingView total shares outstanding')}
+                        {panel('Equity: E (market value)', <>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:'6px',marginBottom:'6px'}}>
+                                <span style={{fontFamily:'var(--mono)',fontSize:'0.95rem',color:'var(--text-primary)'}}>{mu(E)}</span>
+                                {eq.source === 'tv'   && <span className="wacc-tag model">TradingView market cap</span>}
+                                {eq.source === 'calc' && <span className="wacc-tag derived">price x shares</span>}
+                                {eq.source === null   && <span className="wacc-tag missing">MISSING</span>}
+                            </div>
+                            <div style={sub}>
+                                TV market cap: {waccOk(eq.tv) ? mu(eq.tv) : 'n/a'}<br/>
+                                Check, price x shares: {nm(result.currentPrice, 4)} x {waccOk(st.sharesOutstanding) ? nm(st.sharesOutstanding / 1e6, 2) + 'm' : '[n/a]'} = {waccOk(eq.calc) ? mu(eq.calc) : 'n/a'}
+                            </div>
+                            {waccOk(eq.diff) && (
+                                <div style={{...sub,marginTop:'4px',color: eq.diff > WACC_MCAP_TOL ? 'var(--gold)' : 'var(--bull)'}}>
+                                    Difference {(eq.diff * 100).toFixed(2)}% {eq.diff > WACC_MCAP_TOL
+                                        ? `> ${WACC_MCAP_TOL * 100}%: using price x shares instead`
+                                        : `<= ${WACC_MCAP_TOL * 100}%: TradingView figure confirmed`}
+                                </div>
+                            )}
+                            {eq.source === 'tv' && !waccOk(eq.diff) && <div style={{...sub,marginTop:'4px',color:'var(--gold)'}}>Cross-check unavailable (no share count).</div>}
                         </>)}
 
                         {panel('Cost of equity: ke', <>
@@ -1327,8 +1361,13 @@ window.onerror = function(msg, src, line, col, err) {
                                 Using: {kdKey ? WACC_KD_METHODS[kdKey] : 'none'}: {pc(kd, 3)}
                                 {kdMethod !== 'auto' && kd === null && <span style={{color:'var(--gold)'}}> (this method has no data yet)</span>}
                             </div>
-                            {field('bondYield', 'a. Bond yield to maturity', '%', 'YTM overstates the expected return on risky debt.')}
-                            <div style={{marginBottom:'11px'}}>
+                            {field('ebit', 'EBIT (for interest coverage)', unit + ' / yr', `= TV EBIT (ttm) ${usdTxt(st.ebit)}${fxTxt}`)}
+                            <div style={{...sub,marginTop:'-6px',marginBottom:'11px'}}>
+                                Coverage = EBIT / interest = {waccOk(coverage) ? coverage.toFixed(2) + 'x' : MISS}{synth ? `, synthetic rating ${synth.rating}, spread ${synth.spread.toFixed(2)}%` : ''}
+                            </div>
+                            {/* Override methods: inputs shown only when that method is selected */}
+                            {(kdMethod === 'a' || kdMethod === 'auto') && field('bondYield', 'a. Bond yield to maturity', '%', 'YTM overstates the expected return on risky debt.')}
+                            {(kdMethod === 'b' || kdMethod === 'auto') && <div style={{marginBottom:'11px'}}>
                                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'4px'}}>
                                     <span style={{fontSize:'0.74rem',color:'var(--text-secondary)'}}>b. Actual S&P / Moody's rating</span>
                                     {v.rating === '' ? <span className="wacc-tag missing">not set</span> : <span className="wacc-tag user">your input</span>}
@@ -1337,12 +1376,8 @@ window.onerror = function(msg, src, line, col, err) {
                                     <option value="">(unrated / unknown)</option>
                                     {validTable.slice().reverse().map(r => <option key={r.rating} value={r.rating}>{r.rating} (+{r.spread.toFixed(2)}%)</option>)}
                                 </select>
-                            </div>
-                            {field('ebit', 'c. EBIT (for interest coverage)', unit + ' / yr', `= TV EBIT (ttm) ${usdTxt(st.ebit)}${fxTxt}`)}
-                            <div style={{...sub,marginTop:'-6px',marginBottom:'11px'}}>
-                                Coverage = EBIT / interest = {waccOk(coverage) ? coverage.toFixed(2) + 'x' : MISS}{synth ? `, synthetic rating ${synth.rating}, spread ${synth.spread.toFixed(2)}%` : ''}
-                            </div>
-                            {field('recentRate', 'd. Most recent loan / bond rate', '%')}
+                            </div>}
+                            {(kdMethod === 'd' || kdMethod === 'auto') && field('recentRate', 'd. Most recent loan / bond rate', '%')}
                         </>)}
 
                         {panel('Tax rate: t = income tax / pre-tax income', <>
@@ -1469,12 +1504,13 @@ window.onerror = function(msg, src, line, col, err) {
                     {/* ── Assumptions ── */}
                     <div style={{fontSize:'0.75rem',color:'var(--text-secondary)',fontWeight:600,marginBottom:'6px'}}>Assumptions used</div>
                     <ul style={{margin:0,paddingLeft:'18px',fontSize:'0.7rem',color:'var(--text-secondary)',lineHeight:1.7}}>
-                        <li>D and E are market values: E = price x shares; all debt is treated as one coupon bond (face = book debt, coupon = total interest expense, n = face-weighted average maturity) discounted at the current pre-tax kd.</li>
+                        <li>E = TradingView market cap, cross-checked against price x shares; if they differ by more than {WACC_MCAP_TOL * 100}%, price x shares is used.</li>
+                        <li>D and E are market values. All debt is treated as one coupon bond (face = book debt, coupon = total interest expense, n = face-weighted average maturity) discounted at the current pre-tax kd.</li>
                         <li>Book debt = TradingView total debt (most recent quarter); EBIT, revenue, pre-tax margin and net income are trailing twelve months, so balance-sheet and income figures cover slightly different dates.</li>
                         <li>TradingView reports fundamentals in USD{cur === 'USD' ? '.' : <>; converted at USD/{cur} {fx !== null ? nm(fx, 4) : '[unavailable]'} (TradingView FX_IDC spot).</>}</li>
                         <li>Interest expense is not published by TradingView; pre-filled as EBIT / interest coverage. Replace it with the annual-report figure when available.</li>
                         <li>t = effective tax rate = income tax / pre-tax income (your choice). Pre-tax income = pre-tax margin x revenue; income tax = pre-tax income - net income, which overstates tax when net income is after minority interests.</li>
-                        <li>kd priority: a. bond YTM (overstates expected return on risky debt), b. actual rating, c. synthetic rating, d. latest loan rate. For b and c, kd = rf + default spread with no country spread added; rf is the model's local 10-year government bond yield.</li>
+                        <li>kd default: c. synthetic rating from interest coverage, for consistency across firms. a. bond YTM (overstates expected return on risky debt), b. actual rating and d. latest loan rate are optional overrides. For b and c, kd = rf + default spread with no country spread added; rf is the model's local 10-year government bond yield.</li>
                         <li>Rating table: Damodaran large non-financial firms, Jan 2026, approximate match on the lower bound. Financial firms need different cut-offs.</li>
                         <li>ke: {keMethod === 'gordon' ? 'Gordon D1/P0 + g from the valuation model.' : 'CAPM with rf, beta and E[Rm] from the valuation model (editable above).'}</li>
                         <li>Sensitivity: beta steps of 0.1 and kd steps of 0.5%; D is re-priced at each kd.</li>
